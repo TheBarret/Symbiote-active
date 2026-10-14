@@ -1,4 +1,7 @@
 # Symbiote-active
+
+<img width="1024" height="559" alt="logo" src="https://github.com/user-attachments/assets/808c960e-6db9-469d-93ed-fd51f01e92cf" />  
+
 *Symbiote kernel 0.1.1, active development*
 
 Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
