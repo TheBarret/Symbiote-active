@@ -50,7 +50,7 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 - Built-in devices on the bus, one per class: `console` (1), `timer` (2), `vfs` (3). Typed finders `bus_console()`, `bus_timer()`, `bus_vfs()` all working, ops tables dispatching to the real functions.
 
 **0.1.1**  
-- Added: `environment` extended to a virtual storage device, volatile session variables, ring buffer and capped, per node can assign auto-purge options; `access`,`ttl` or `importance` (OOM-model), that determine life cycle of data.
+- Added: `environment` extended to a virtual storage device, volatile session variables, ring buffer, per node can assign auto-purge options; `access`,`ttl` or `importance` (OOM-model), that determine life cycle of data.
 
   <img width="659" height="544" alt="image" src="https://github.com/user-attachments/assets/8e17c1cb-d392-498a-903a-3d94a6b28cfd" />  
 
