@@ -2,13 +2,15 @@
 
 <img width="1024" height="559" alt="logo" src="https://github.com/user-attachments/assets/808c960e-6db9-469d-93ed-fd51f01e92cf" />  
 
-*Symbiote kernel 0.1.1, active development*
+<img width="1290" height="850" alt="0.1.1" src="https://github.com/user-attachments/assets/0e444b29-62c9-4ae6-91dd-2dd370c977dd" />  
+
+*Symbiote kernel 0.1.1, active development*  
 
 Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
 
 ## Changelog
 
-**0.1.0** - Initial codebase & Primary foundation
+**0.1.0** - Initial codebase & Primary foundation  
 - `lib/mem.h`, `lib/mem.c`: added `memchr`, `explicit_bzero`, and named align/bit helpers (`is_power_of_two`, `align_up`, `align_down`, `ptr_align_up`, `ptr_align_down`, `bit_test`, `bit_set`, `bit_clear`).
 - `lib/string.h`, `lib/string.c`: added `strrchr`, `strcat`, `strncat`, `strspn`, `strcspn`, `strpbrk`, `strstr`, `strtoull`, `strtoll`, and the strict wrapper `kstrtoull`.
 - `lib/string.c`: rewrote `strtoll`'s overflow check as two explicit branches.
