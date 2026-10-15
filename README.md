@@ -103,7 +103,7 @@ future devices (System, in particular) will register their own namespaces and ex
 
 **Interpreters and Script engines**  
 
-which reach the device through SBasic's verbs and use it to hand work between script invocations.  
+which reach the device through interpreters or script engines and use it to write/read/store between script invocations.  
 A script that runs, deposits a result under a well-known key, and exits leaves a durable artifact for the next script to pick up.  
 The access budget model makes the one-shot handoff, write once, read once, gone, the natural default,  
 rather than a pattern that has to be enforced by convention.  
