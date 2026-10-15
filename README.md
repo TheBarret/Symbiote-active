@@ -68,11 +68,9 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
   asynchronously by a timer-driven sweeper when their time budget passes, and under space pressure by an importance-ordered eviction policy.
   The device is registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
 
-- `ext/btool/`:
-  added the `btool` extension app for inspecting the bus registry.
-  Reads the device table through `bus_count()` / `bus_at()`, displays each device's name,  
-  class, version, ops pointer, and private data pointer, and allows navigation between registered devices.  
-
+- `ext/envtool/`: added the `envtool` using the `TUI` engine to browse and inspect the `environment` variable store.  
+- `ext/btool/`: added the `btool` extension app for inspecting the bus registry.
+  
 ## Environment Layers
 
 The `environment` module is basically a storage device shaped as a driver on the bus registry,  
