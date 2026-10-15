@@ -56,6 +56,63 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 
 **0.1.1** - Environment codebase  
 
+```
+                                  ┌──────────────────────┐
+                                  │   limine bootloader  │  BIOS / UEFI, hands over
+                                  │                      │  memory map, HHDM, ACPI
+                                  └──────────┬───────────┘
+                                             │  boot protocol
+                                             ▼
+                                  ┌──────────────────────┐
+                                  │        kernel        │  kmain() orchestrates
+                                  │                      │  the bring-up order
+                                  └──────────┬───────────┘
+                                             │
+          ┌──────────────┬───────────────────┼───────────────────┬──────────────┐
+          │              │                   │                   │              │
+          ▼              ▼                   ▼                   ▼              ▼
+   ┌────────────┐ ┌────────────┐     ┌────────────┐     ┌────────────┐  ┌────────────┐
+   │  console   │ │ ISR /      │     │    heap    │     │   ramfs    │  │ extensions │
+   │            │ │ timers     │     │            │     │            │  │            │
+   │ ps/2,      │ │ pic, lapic │     │ kmalloc    │     │ vfs nodes, │  │ applets,   │
+   │ serial,    │ │ pit, after │     │ kfree      │     │ paths      │  │ toolkits,  │
+   │ framebuffer│ │ /cancel    │     │ kmemdebug  │     │ dir walk   │  │interpreters│
+   └──────┬─────┘ └──────┬─────┘     └──────┬─────┘     └──────┬─────┘  └────┬───────┘
+          │              │                  │                  │             │
+          │              │                  │                  │             │
+          │              │                  │                  │             │
+          │              │  ┌───────────────┘                  │             │
+          │              │  │                                  │             │
+          │              │  │     ┌────────────────────────────┘             │
+          │              │  │     │                                          │
+          │              │  ▼     ▼                                          │
+          │              │ ┌──────────────────┐                              │
+          │              │ │  virt:           │                              │
+          │              │ │  environment     │  first consumer device       │
+          │              │ │  store (env)     │  no hardware, no storage of  │
+          │              │ │                  │  its own — uses the others   │
+          │              │ │  ring collector  │                              │
+          │              │ │  OOM-model       │                              │
+          │              │ │  reclamation     │                              │
+          │              │ └────────┬─────────┘                              │
+          │              │          │                                        │
+          │              │◄─────────┘  env → timer (sweeper via after/cancel)│
+          │              │                                                   │
+          │              │                                                   │
+          │              │                                                   │
+          ▼              ▼                                                   ▼
+   ┌──────────────────────────────────────────────────────────────────────────────┐
+   │                               bus registry                                   │
+   │                                                                              │
+   │   name → ops   (register during init, query during runtime)                  │
+   │                                                                              │
+   │   classes:  console · timer · vfs · log · input · env · system* · user       │
+   │                                                                              │
+   │   every box above calls bus_register() once, during its own init             │
+   │   every box above also calls bus_*() to reach its peers                      │
+   └──────────────────────────────────────────────────────────────────────────────┘
+```
+
 - `core/timer.h`, `core/timer.c`:  
   added helpers for milliseconds to timer ticks conversions (`ms_to_ticks_floor`, `ms_to_ticks_ceil`,`ms_to_ticks_round`).
   Rounding policy is now explicit at every call site, and the conversions are overflow-safe.
