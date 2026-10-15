@@ -89,18 +89,97 @@ uint64_t uptime_ms(void) {
     return ticks * divisor * 1000ull / PIT_FREQ;
 }
 
-/* ms -> ticks, rounded up. Same rounding timer_sleep_ms uses. */
-static uint64_t ms_to_ticks(uint64_t ms) {
-    return (ms * PIT_FREQ + divisor * 1000ull - 1) / (divisor * 1000ull);
+
+/* ms -> ticks conversions */
+
+/*
+ * All three conversions share the same shape:
+ *
+ *     ticks = f(ms * hz / 1000)
+ *
+ * where f is the rounding function. The product ms * hz can overflow
+ * for very large ms, so the computation is split:
+ *
+ *     whole = (ms / 1000) * hz
+ *     rem   = (ms % 1000) * hz
+ *
+ * whole is the integer part of ms * hz / 1000,
+ * and rem is the remaining numerator over 1000.
+ * Each product is bounded by ms * hz / 1000 in the worst case,
+ * so the split removes the overflow risk for any ms that a caller would realistically pass.
+ *
+ * If hz == 0 (timer not initialised), all three return 0.
+ * The caller gets "no delay" rather than a garbage conversion,
+ * and a subsequent timer_after() will fire on the next tick rather than wait forever.
+ */
+
+static uint64_t ms_to_ticks_prepare(uint64_t ms, uint64_t *whole_out,
+                                    uint64_t *rem_out) {
+    /* Returns hz, or 0 if the timer is not initialised.
+     * On success, fills *whole_out and *rem_out such that:
+     *     ms * hz == whole * 1000 + rem, with 0 <= rem < 1000. */
+    uint64_t hz = timer_hz();
+    if (hz == 0)
+        return 0;
+
+    uint64_t whole = (ms / 1000) * hz;
+    uint64_t rem   = (ms % 1000) * hz;
+    *whole_out = whole;
+    *rem_out   = rem;
+    return hz;
 }
+
+uint64_t ms_to_ticks_floor(uint64_t ms) {
+    if (ms == 0)
+        return 0;
+
+    uint64_t whole, rem;
+    uint64_t hz = ms_to_ticks_prepare(ms, &whole, &rem);
+    if (hz == 0)
+        return 0;
+
+    /* floor: whole + rem / 1000 (integer division) */
+    return whole + rem / 1000;
+}
+
+uint64_t ms_to_ticks_ceil(uint64_t ms) {
+    if (ms == 0)
+        return 0;
+
+    uint64_t whole, rem;
+    uint64_t hz = ms_to_ticks_prepare(ms, &whole, &rem);
+    if (hz == 0)
+        return 0;
+
+    /* ceil: whole + (rem + 999) / 1000 */
+    return whole + (rem + 999) / 1000;
+}
+
+uint64_t ms_to_ticks_round(uint64_t ms) {
+    if (ms == 0)
+        return 0;
+
+    uint64_t whole, rem;
+    uint64_t hz = ms_to_ticks_prepare(ms, &whole, &rem);
+    if (hz == 0)
+        return 0;
+
+    /* round to nearest: whole + (rem + 500) / 1000.
+     * Ties (rem == 500) round up, matching the "half away from zero"
+     * convention used elsewhere in this codebase. */
+    return whole + (rem + 500) / 1000;
+}
+
+
 
 void timer_sleep_ms(uint64_t ms) {
     if (!inited || ms == 0)
         return;
-    if (ms > 1000000000000ull)      /* keep the arithmetic below from overflowing */
-        ms = 1000000000000ull;
 
-    uint64_t need = (ms * PIT_FREQ + divisor * 1000ull - 1) / (divisor * 1000ull);   /* round up */
+    /* The conversion saturates internally; no local clamp needed. */
+    uint64_t need = ms_to_ticks_ceil(ms);
+    if (need == 0)
+        need = 1;   /* a nonzero request sleeps at least one tick */
 
     uint64_t flags = cpu_irq_save();
     uint64_t target = ticks + need;
@@ -126,7 +205,7 @@ int timer_after(uint64_t ms, void (*cb)(void *), void *arg) {
         if (next_task_id <= 0)
             next_task_id = 1;   /* wrap; stale ids simply never match */
 
-        tasks[i].deadline_ticks = ticks + ms_to_ticks(ms);
+        tasks[i].deadline_ticks = ticks + ms_to_ticks_ceil(ms);
         tasks[i].cb             = cb;
         tasks[i].arg            = arg;
         tasks[i].id             = id;

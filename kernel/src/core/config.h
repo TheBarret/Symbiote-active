@@ -77,4 +77,19 @@ static const uint32_t SYM_FBCON_FG = 0x0033ff66;
  */
 #define BUS_MAX_DEVICES 32
 
+
+/* Enviroment settings
+ * Ref: src/core/env.h
+ */
+#define ENV_IMPORTANCE_DEFAULT  5
+#define ENV_IMPORTANCE_MIN      0
+#define ENV_IMPORTANCE_MAX      10
+#define ENV_DEFAULT_MAX_ENTRIES 256
+#define ENV_DEFAULT_MAX_BYTES   (64 * 1024)
+#define ENV_NAME_MAX            64
+#define ENV_VALUE_MAX           1024
+#define ENV_SWEEP_PERIOD_MS     1000
+#define ENV_SWEEP_BATCH         64
+#define ENV_MASK_DEFAULT        0x0000
+
 #endif

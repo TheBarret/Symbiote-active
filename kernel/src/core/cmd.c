@@ -214,7 +214,7 @@ int cmd_dispatch(int argc, char **argv) {
     if (rc == CMD_USAGE)
         cmd_print_usage(c);
     else if (rc != 0)
-        kprintf("%s: exit %d\n", c->name, rc);
+        kprintf("%s exit(%d)\n", c->name, rc);
     return rc;
 }
 
