@@ -54,18 +54,67 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 - `timer` extended to a real device: `timer_after` / `timer_cancel` / `timer_drain`, ISR sets ready, drain runs decoupled, callbacks in thread context. Wired into `kbd_getchar`'s idle path so scheduling works while the shell is blocked.
 - Built-in devices on the bus, one per class: `console` (1), `timer` (2), `vfs` (3). Typed finders `bus_console()`, `bus_timer()`, `bus_vfs()` all working, ops tables dispatching to the real functions.
 
-**0.1.1**  
-- Added: `environment` extended to a virtual storage device, volatile session variables, ring buffer, per node can assign auto-purge options; `access`,`ttl` or `importance` (OOM-model), that determine life cycle of data.
+**0.1.1** - Environment codebase  
 
-  <img width="659" height="544" alt="image" src="https://github.com/user-attachments/assets/8e17c1cb-d392-498a-903a-3d94a6b28cfd" />  
+- `core/timer.h`, `core/timer.c`:  
+  added helpers for milliseconds to timer ticks conversions (`ms_to_ticks_floor`, `ms_to_ticks_ceil`,`ms_to_ticks_round`).
+  Rounding policy is now explicit at every call site, and the conversions are overflow-safe.
+  `timer_sleep_ms` and `timer_after` were updated to use the ceil variant, which is what both have always implicitly wanted.
 
-- Added: `btool` extension app to inspect device bus, read out of raw data and pointers.
+- `core/env.c`, `core/env.h`, `ext/env/env.c`:  
+  added the `environment` device and its shell toolkit. A bounded, fixed-capacity store of `(namespace, name) -> value` entries,
+  with per-entry access budgets, time budgets, importance levels, and free-form classification masks.
+  Reclamation follows OOM-model principles: entries are reclaimed synchronously when their access budget is exhausted,
+  asynchronously by a timer-driven sweeper when their time budget passes, and under space pressure by an importance-ordered eviction policy.
+  The device is registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
 
-  <img width="767" height="447" alt="image" src="https://github.com/user-attachments/assets/b634278e-a12c-428f-8bc0-f067f9ceb7df" />  
+- `ext/btool/`:
+  added the `btool` extension app for inspecting the bus registry.
+  Reads the device table through `bus_count()` / `bus_at()`, displays each device's name,  
+  class, version, ops pointer, and private data pointer, and allows navigation between registered devices.  
+
+## Environment Layers
+
+The `environment` module is basically a storage device shaped as a driver on the bus registry,  
+it stores and shares variables with a lifecycle:  
+
+    A bounded, fixed-capacity key-value store where each entry is a string addressed by a `(namespace, name)` pair,  
+    or with the `MASK` field for arbitrary bitmask matching, the table is statically bounded, cannot grow without limit.  
+
+<img width="736" height="223" alt="env" src="https://github.com/user-attachments/assets/1be556f2-ad66-405b-9e16-07c058339d41" />  
 
 
-## Assets
+Entries carry explicit lifetimes:  
 
-<img width="572" height="1024" alt="diagram" src="https://github.com/user-attachments/assets/8436ab96-6393-4492-9bc3-3ea02094e73f" />  
+    An access budget that is consumed by reads, a time budget that is enforced by a periodic sweeper,  
+    and an importance value that orders which entries are sacrificed when space runs short.  
+    All three mechanisms converge on a single reclamation path,  
+    so the rules for when an entry dies are stated once and applied uniformly.  
 
+<img width="750" height="455" alt="envtool" src="https://github.com/user-attachments/assets/bcff0efc-0d77-46ae-b09a-bd3af6b9e34e" />  
 
+*using `envtool` extension to inspect all variables*  
+ 
+It serves three platforms, in order of appearance:  
+
+**The kernel and extensions scope**  
+
+which use it as a place to record runtime state  data that would otherwise need to be threaded through call chains as function arguments.  
+The `shell.cwd`, `shell.last_exit`, and comparable keys are the first instance of this pattern;  
+future devices (System, in particular) will register their own namespaces and expose their values the same way.  
+
+**Interpreters and Script engines**  
+
+which reach the device through SBasic's verbs and use it to hand work between script invocations.  
+A script that runs, deposits a result under a well-known key, and exits leaves a durable artifact for the next script to pick up.  
+The access budget model makes the one-shot handoff, write once, read once, gone, the natural default,  
+rather than a pattern that has to be enforced by convention.  
+
+**The shell**  
+
+which uses the device's shell command as a live inspection tool.  
+The `env stat` view, the `env list` view and the device-level counters in `env stats`,  
+together turn the environment from an opaque store into a piece of kernel state that can be examined,  
+while the system is running without adding any diagnostic code to the device itself.  
+
+---
