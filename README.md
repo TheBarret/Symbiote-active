@@ -3,6 +3,36 @@
 
 Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
 
+The plan is to improve the core, debug the environment codebase, followed by a featured custom interpreter,  
+For this I need to develop a custom dynamic linker device that can map and manage all the `ops_*` device pointers safely.  
+
+The interpreter will use the bus and dynamic linker to convey operations with evaluated parameters.  
+Basic data types such as, `int, string` will be slowly added in to get the basics.  
+
+The variables will be stored in the environment storage, the `MASK` bitmask field (`u32`) will be used as metadata field.  
+Embedding data types, locks, and other various flag-based information, the interpreter can query per `Namespace, Name` and `Mask`.  
+The interpreter does not have to worry about disposing the scope data, this is done by the environment purging scheduler.  
+
+## Syntax Style
+
+Pseudo `Hello, World!`:  
+```lua
+    USE: console;
+
+    LET $message, "Hello, World\n";
+    LET &console_write, $message;
+```
+
+Pseudo `Timer`-event:  
+```lua
+    USE: console, timer;
+
+    ON TIMER_TICK(10000) {             // milliseconds
+      LET $message, "Hello, World\n";
+      LET &console_write, $message;
+    }
+```
+
 **0.1.1** - Overhaul Core & Environment Layer  
 
 <img width="1290" height="850" alt="image" src="https://github.com/user-attachments/assets/abc68e05-4359-46e1-9728-7f0f8246e40e" />  
@@ -36,18 +66,17 @@ it stores and shares variables with a lifecycle:
 
 *stress testing*  
 
-    A bounded, fixed-capacity key-value store where each entry is a string addressed by a `(namespace, name)` pair,  
-    or with the `MASK` field for arbitrary bitmask matching, the table is statically bounded, cannot grow without limit.  
+A bounded, fixed-capacity key-value store where each entry is a string addressed by a `(namespace, name)` pair,  
+or with the `MASK` field for arbitrary bitmask matching, the table is statically bounded, cannot grow without limit.  
 
 <img width="736" height="223" alt="env" src="https://github.com/user-attachments/assets/1be556f2-ad66-405b-9e16-07c058339d41" />  
 
 
 Entries carry explicit lifetimes:  
-
-    An access budget that is consumed by reads, a time budget that is enforced by a periodic sweeper,  
-    and an importance value that orders which entries are sacrificed when space runs short.  
-    All three mechanisms converge on a single reclamation path,  
-    so the rules for when an entry dies are stated once and applied uniformly.  
+An access budget that is consumed by reads, a time budget that is enforced by a periodic sweeper,  
+and an importance value that orders which entries are sacrificed when space runs short.  
+All three mechanisms converge on a single reclamation path,  
+so the rules for when an entry dies are stated once and applied uniformly.  
 
 <img width="750" height="455" alt="envtool" src="https://github.com/user-attachments/assets/bcff0efc-0d77-46ae-b09a-bd3af6b9e34e" />  
 
