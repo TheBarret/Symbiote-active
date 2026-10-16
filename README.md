@@ -1,13 +1,11 @@
 # Symbiote-active
-
 <img width="1024" height="559" alt="logo" src="https://github.com/user-attachments/assets/808c960e-6db9-469d-93ed-fd51f01e92cf" />  
-
-<img width="1290" height="850" alt="0.1.1" src="https://github.com/user-attachments/assets/0e444b29-62c9-4ae6-91dd-2dd370c977dd" />  
-
 
 Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
 
-**0.1.1** - Overhaul Core & Environment Layer
+**0.1.1** - Overhaul Core & Environment Layer  
+
+<img width="1290" height="850" alt="image" src="https://github.com/user-attachments/assets/abc68e05-4359-46e1-9728-7f0f8246e40e" />  
 
 <img width="1004" height="547" alt="Environment" src="https://github.com/user-attachments/assets/4343e103-5507-4315-a907-386609a3aab7" />  
 
@@ -32,6 +30,11 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 
 The `environment` module is basically a storage device shaped as a driver on the bus registry,  
 it stores and shares variables with a lifecycle:  
+
+
+<img width="1290" height="850" alt="image" src="https://github.com/user-attachments/assets/be17d16f-f846-4298-b7ed-780c2b604cfd" />   
+
+*stress testing*  
 
     A bounded, fixed-capacity key-value store where each entry is a string addressed by a `(namespace, name)` pair,  
     or with the `MASK` field for arbitrary bitmask matching, the table is statically bounded, cannot grow without limit.  
