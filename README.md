@@ -11,7 +11,8 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 
 <img width="1004" height="547" alt="Environment" src="https://github.com/user-attachments/assets/4343e103-5507-4315-a907-386609a3aab7" />  
 
-
+- All interior `core/*` modules have been refactored and aligned, and have added safety logic.
+  
 - `core/timer.h`, `core/timer.c`:  
   added helpers for milliseconds to timer ticks conversions (`ms_to_ticks_floor`, `ms_to_ticks_ceil`,`ms_to_ticks_round`).
   Rounding policy is now explicit at every call site, and the conversions are overflow-safe.
