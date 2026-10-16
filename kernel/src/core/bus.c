@@ -1,4 +1,3 @@
-#include "klog.h"
 #include <stddef.h>
 #include <lib/string.h>
 #include <core/console.h>
@@ -12,8 +11,8 @@
  * Backed by a static array so bus_init() can run before heap_init().
  * See core/bus.h for the model and the registration contract.
  *
- * Single-threaded boot assumption throughout: registration happens
- * during kmain and ext_init_all(), lookup happens afterwards.
+ * After bus_init and both registration waves complete, the table is
+ * read-only. All lookups are lock-free reads.
  */
 
 static struct bus_device bus_table[BUS_MAX_DEVICES];
@@ -32,27 +31,23 @@ void bus_init(void) {
 }
 
 int bus_register(const struct bus_device *dev) {
-    if (dev == NULL || dev->name == NULL || dev->name[0] == '\0') {
+    if (dev == NULL || dev->name == NULL || dev->name[0] == '\0')
         return -1;
-    }
-    if (dev->class == BUS_CLASS_NONE) {
+    if (dev->class == BUS_CLASS_NONE)
         return -1;
-    }
-    if (bus_used >= BUS_MAX_DEVICES) {
+    if (dev->ops == NULL)
         return -1;
-    }
+    if (bus_used >= BUS_MAX_DEVICES)
+        return -1;
 
-    /* First registrant wins. A duplicate name is a bug in the caller,
-     * not something to silently paper over. */
+    /* First registrant wins. Duplicate name is a caller bug. */
     for (size_t i = 0; i < bus_used; i++) {
-        if (strcmp(bus_table[i].name, dev->name) == 0) {
+        if (strcmp(bus_table[i].name, dev->name) == 0)
             return -1;
-        }
     }
 
     bus_table[bus_used] = *dev;
     bus_used++;
-    //klog("bus_register(): name=%s, class=%u\n", dev->name, dev->class);
     return 0;
 }
 
@@ -70,43 +65,34 @@ int bus_test(const char *name) {
     return 0;
 }
 
-
 const struct bus_device *bus_find(const char *name) {
-    if (name == NULL) {
+    if (name == NULL)
         return NULL;
-    }
     for (size_t i = 0; i < bus_used; i++) {
-        if (strcmp(bus_table[i].name, name) == 0) {
+        if (strcmp(bus_table[i].name, name) == 0)
             return &bus_table[i];
-        }
     }
     return NULL;
 }
 
 const struct bus_device *bus_find_class(enum bus_class class, size_t index) {
-    if (class == BUS_CLASS_NONE) {
+    if (class == BUS_CLASS_NONE)
         return NULL;
-    }
     size_t seen = 0;
     for (size_t i = 0; i < bus_used; i++) {
-        if (bus_table[i].class != class) {
+        if (bus_table[i].class != class)
             continue;
-        }
-        if (seen == index) {
+        if (seen == index)
             return &bus_table[i];
-        }
         seen++;
     }
     return NULL;
 }
 
-/* typed finders */
-
 const struct console_ops *bus_console(void) {
     const struct bus_device *d = bus_find_class(BUS_CLASS_CONSOLE, 0);
     return (d != NULL) ? (const struct console_ops *)d->ops : NULL;
 }
-
 
 const struct vfs_ops *bus_vfs(void) {
     const struct bus_device *d = bus_find_class(BUS_CLASS_VFS, 0);
@@ -118,18 +104,17 @@ const struct timer_ops *bus_timer(void) {
     return (d != NULL) ? (const struct timer_ops *)d->ops : NULL;
 }
 
-//const struct klog_ops *bus_klog(void) {
-//    const struct bus_device *d = bus_find_class(BUS_CLASS_LOG, 0);
-//    return (d != NULL) ? (const struct klog_ops *)d->ops : NULL;
-//}
+const struct env_ops *bus_env(void) {
+    const struct bus_device *d = bus_find_class(BUS_CLASS_ENV, 0);
+    return (d != NULL) ? (const struct env_ops *)d->ops : NULL;
+}
 
 size_t bus_count(void) {
     return bus_used;
 }
 
 const struct bus_device *bus_at(size_t index) {
-    if (index >= bus_used) {
+    if (index >= bus_used)
         return NULL;
-    }
     return &bus_table[index];
 }

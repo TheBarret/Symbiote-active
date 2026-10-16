@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <core/version.h>
 #include <core/cmd.h>
 #include <core/kprintf.h>
 #include <lib/mem.h>
@@ -40,7 +41,8 @@ void cmd_print_usage(const struct sym_cmd *c) {
 
 /*  parameter spec  */
 
-#define TOK_MAX 24      /* longest single parameter, e.g. "[iterations:num]" */
+// Moved to: core/config.h
+//#define TOK_MAX 24      /* longest single parameter, e.g. "[iterations:num]" */
 
 struct param {
     char tok[TOK_MAX];  /* the parameter exactly as written, for messages */

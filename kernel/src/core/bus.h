@@ -8,7 +8,8 @@
 /* Software bus: a name -> ops registry, linear with the core.
  *
  * Not an extension, not a layer above the core. Always compiled in.
- * Every core module that wants to be discoverable includes this header and calls bus_register() from its own init.
+ * Every core module that wants to be discoverable includes this header
+ * and calls bus_register() from its own init.
  *
  * This is a registry, not a message bus and not a uniform vtable.
  * Each device class has its own ops struct (console_ops, vfs_ops, ...);
@@ -17,32 +18,37 @@
  * a timer is not a block device, and pretending otherwise buys nothing.
  *
  * The bus exists for two consumers:
- *   1. The script VM, which cannot #include kernel headers and must discover devices at runtime.
- *   2. A future loadable-driver path, where the device set is not known at link time.
-
- * Statically-linked C extensions and core modules should keep calling their module APIs directly;
- * routing through the bus buys them nothing.
+ *   1. The script VM, which cannot #include kernel headers and must
+ *      discover devices at runtime.
+ *   2. A future loadable-driver path, where the device set is not known
+ *      at link time.
+ *
+ * Statically-linked C extensions and core modules should keep calling
+ * their module APIs directly; routing through the bus buys them nothing.
  *
  * Backed by a static array, so bus_init() runs before heap_init().
  * Registration happens in two waves:
  *   wave 1  core modules, in kmain order (serial, timer, vfs, ...)
  *   wave 2  extensions, in ext_init_all() priority order
-
  * Both waves only call bus_register(); neither needs the heap.
  *
- * Single-threaded boot assumption:
- * registration happens during kmain and ext_init_all(), lookup happens afterwards. No locking.
- */
+ * Concurrency: registration happens during kmain and ext_init_all().
+ * After both waves complete, the table is read-only. All lookups
+ * (bus_find, bus_find_class, bus_count, bus_at, typed finders) are
+ * lock-free reads and are safe from any context, including ISRs.
+ * bus_register() after shell_run() is a bug; there is no lock. */
 
 enum bus_class {
     BUS_CLASS_NONE    = 0,   /* null */
     BUS_CLASS_CONSOLE = 1,   /* serial.c, console.c */
     BUS_CLASS_TIMER   = 2,   /* interrupts, timer.c */
     BUS_CLASS_VFS     = 3,   /* virtual filesystem, vfs.c */
-    BUS_CLASS_LOG     = 4,   /* kerner logger, klog.c */
+    BUS_CLASS_LOG     = 4,   /* kernel logger, console.c */
     BUS_CLASS_INPUT   = 5,   /* keyboard input, keyboard.c */
     BUS_CLASS_ENV     = 6,   /* environment, env.c */
-    BUS_CLASS_USER    = 7,   /* user defined class */
+    BUS_CLASS_FWD     = 7,   /* forwarder */
+    BUS_CLASS_SY      = 8,   /* planned: synapse interpreter, sy.c */
+    BUS_CLASS_USER    = 9,   /* user defined class */
     /* grow as devices appear; keep values stable once assigned */
 };
 
@@ -50,8 +56,7 @@ struct bus_device {
     const char *name;         /* unique, e.g. "console", "timer", "vfs" */
     enum bus_class class;
     uint16_t version;         /* module revision, exposed to scripts */
-    //void    *ops;             /* struct <class>_ops *, cast on lookup */
-    const void *ops;
+    const void *ops;          /* struct <class>_ops *, cast on lookup; must not be NULL */
     void    *private_data;    /* backend state, opaque to the bus */
 };
 
@@ -60,19 +65,21 @@ struct bus_device {
 void bus_init(void);
 
 /* Register a device. The struct is copied into the table; the caller
- * does not need to keep it alive (but ops and private_data must be).
+ * must keep dev->name alive for the entry's lifetime (string literals
+ * are fine), and must keep ops and private_data alive indefinitely.
  *
  * Returns 0, or -1 if:
  *   - the table is full (BUS_MAX_DEVICES)
  *   - dev or dev->name is NULL
+ *   - dev->name is the empty string
  *   - dev->class is BUS_CLASS_NONE
+ *   - dev->ops is NULL
  *   - the name is already registered (first registrant wins)
  *
- * Registration only during kmain and ext_init_all(). Calling this
- * after shell_run() is a bug; the table has no lock. */
+ * Registration only during kmain and ext_init_all(). */
 int bus_register(const struct bus_device *dev);
 
-/* little test if find-by-name results in success */
+/* Self-test. Looks up name, checks the miss path and the console finder. */
 int bus_test(const char *name);
 
 /* Generic lookup. Returns NULL if not found.

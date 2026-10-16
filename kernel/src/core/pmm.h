@@ -17,7 +17,21 @@
  *   - reserves frame 0 so pmm_alloc() returning 0 is unambiguously "out".
  *
  * No locking, single-threaded boot assumption, same as the rest of the kernel.
- * When SMP arrives this file is one of the places that will need a spinlock. */
+ * When SMP arrives this file is one of the places that will need a spinlock.
+
+ * Revisions:
+ - total_frames rounds up. end_frame in Pass 3 rounds up.
+   The tail frame of a non-aligned USABLE region is now covered and freed.
+ - frames_mark_used bounds-checks; returns silently if the range doesn't fit.
+ - alloc_cursor added. Scan starts at the cursor and wraps once. Run state carries across the wrap;
+   start is computed correctly when the run spans the wrap point.
+   alloc_cursor advances to (start + count) % total_frames after each success.
+ - one comment on reserve_bitmap_frames noting the free-frames invariant it relies on.
+ - one comment on the HHDM helpers noting they're only valid for HHDM pointers.
+ - pmm_free's range check rewritten as start >= total_frames || count > total_frames - start — same semantics,
+   no start + count overflow window
+
+ */
 
 // Moved to ref: core/version.h
 //#define PMM_PAGE_SIZE 4096

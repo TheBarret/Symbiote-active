@@ -530,10 +530,11 @@ static const struct env_ops env_bus_ops = {
     .drop_namespace = env_drop_namespace,
 };
 
-const struct env_ops *bus_env(void) {
-    const struct bus_device *d = bus_find_class(BUS_CLASS_ENV, 0);
-    return (d != NULL) ? (const struct env_ops *)d->ops : NULL;
-}
+// Ref: defined at bus.h
+//const struct env_ops *bus_env(void) {
+//    const struct bus_device *d = bus_find_class(BUS_CLASS_ENV, 0);
+//    return (d != NULL) ? (const struct env_ops *)d->ops : NULL;
+//}
 
 /* init */
 
@@ -563,6 +564,10 @@ void env_init(size_t max_entries, size_t max_bytes) {
             klog_warning("Environment sweep timer not enabled\n");
     }
 
+    klog("→ env_init() entries=%zu, bytes=%zu, timer=%s\n",
+            max_entries, max_bytes,
+            e->timer ? "attached" : "disabled");
+
     struct bus_device dev = {
         .name         = "env",
         .class        = BUS_CLASS_ENV,
@@ -572,9 +577,6 @@ void env_init(size_t max_entries, size_t max_bytes) {
     };
     bus_register(&dev);
     bus_test("env");
-    klog_env("→ env_init() entries=%zu bytes=%zu timer=%s\n",
-             max_entries, max_bytes,
-             e->timer ? "true" : "false");
 }
 
 void env_destroy(void) {

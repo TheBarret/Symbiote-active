@@ -3,59 +3,40 @@
 
 #include <stddef.h>
 
-/* Kernel heap.
- *
- * A chunked free list with block headers and immediate coalescing.
- * Chunks come from the PMM (pmm_alloc_contig) and are reached via the HHDM.
- * Chunks are never returned to the PMM; freeing a block returns it to the chunk's free list, where it is reused.
- *
- * Allocation is first-fit, blocks are 16-byte aligned, no locking;
- * the single-threaded boot assumption applies.
- *
- * Debug build (-DSYM_MEMDEBUG) enables:
- *   - magic numbers in block headers, verified on free and in heapcheck
- *   - poison on free (0xDD) and on alloc (0xAA)
- *   - owner tagging from ext_current() at alloc time
- *   - heapcheck() walks every chunk and every block and verifies headers
- * The fast build has none of that; the two functions below are the API in both builds. */
+/* Kernel heap: chunked free list, block headers, immediate coalescing.
+ * Chunks from pmm_alloc_contig, reached via HHDM, never returned to PMM.
+ * First-fit, 16-byte aligned, no locking (single-threaded boot only).
+ * -DSYM_MEMDEBUG adds magic, poison, owner tagging, heapcheck.
 
-/* Initialize the heap with one chunk of the default size.
- * Panics if the PMM has no frames. */
-void heap_init(void);
+ revisions:
+ - struct block_header uses __attribute__((aligned(HEAP_ALIGN))); block_header_padded is gone.
+   HDR_SIZE is now align_up(sizeof(header), 16) — 16 in fast build, 32 in debug.
+ - New CHUNK_HDR_SIZE, used everywhere sizeof(struct chunk) was used in layout math. Fixes the 8-aligned first-block bug.
+ - chunk_create rejects payload_bytes > SIZE_MAX - HDR_SIZE - CHUNK_HDR_SIZE.
+   kmalloc guards the same expression before calling it.
+ - kfree uses c->size for the bound check instead of walking to the sentinel. One walk instead of two.
+ - kmalloc's scan has a seen cycle guard (debug builds only).
+ - krealloc overflow check simplified; the ? SIZE_MAX trick is gone.
+ - heap_get_stats uses a local ps to avoid recomputing BLOCK_PAYLOAD_SIZE(b) three times.
 
-/* Allocate `size` bytes. Returns 16-byte aligned memory, or NULL.
- * Contents are undefined (use kzalloc for zeroed memory). */
-void *kmalloc(size_t size);
+ * */
 
-/* Allocate `size` bytes, zeroed. Returns NULL on failure. */
-void *kzalloc(size_t size);
+void heap_init(void);                        /* panics if PMM has no frames */
+void *kmalloc(size_t size);                  /* 16-aligned, NULL on fail, undefined contents */
+void *kzalloc(size_t size);                  /* zeroed, NULL on fail */
+void kfree(void *ptr);                       /* NULL is no-op; double-free/corruption panics */
+void *krealloc(void *ptr, size_t new_size);  /* NULL->kmalloc, 0->kfree+NULL, fail leaves original */
 
-/* Free a block. kfree(NULL) is a no-op. A double free or a corrupted
- * header panics (always, not just in debug builds) because continuing
- * with a broken heap is worse than stopping. */
-void kfree(void *ptr);
-
-/* Resize an allocation, preserving contents up to min(old, new).
- * krealloc(NULL, n) == kmalloc(n).
- * krealloc(p, 0)   == kfree(p), returns NULL.
- * On failure returns NULL and leaves the original allocation untouched. */
-void *krealloc(void *ptr, size_t new_size);
-
-/* Summary: chunks, blocks, bytes used, bytes free, largest free block. */
 struct heap_stats {
     size_t chunks;
-    size_t blocks;              /* total blocks across all chunks */
+    size_t blocks;
     size_t blocks_free;
-    size_t bytes_used;          /* payload bytes currently allocated */
-    size_t bytes_free;          /* payload bytes in free blocks */
-    size_t largest_free;        /* biggest free block, in payload bytes */
+    size_t bytes_used;
+    size_t bytes_free;
+    size_t largest_free;
 };
 struct heap_stats heap_get_stats(void);
 
-/* Verify every block header in every chunk.
- * Panics on the first inconsistency. Cheap in the fast build (it is not compiled),
- * so callers can guard with #ifdef or just call it,
- * in the fast build it is a no-op stub that returns immediately. */
-void heapcheck(void);
+void heapcheck(void);                        /* no-op in fast build */
 
 #endif

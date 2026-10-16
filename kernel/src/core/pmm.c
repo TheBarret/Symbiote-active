@@ -8,23 +8,16 @@
 #include <core/panic.h>
 #include <core/pmm.h>
 
-/* The memory map is sorted by base address,
- * and USABLE / BOOTLOADER_RECLAIMABLE entries are guaranteed 4096-aligned and non-overlapping.
- * We assert those properties in init so a future bootloader that violates them is caught here,
- * rather than as a corruption hours later. */
+/* Limine sorts the map by base and guarantees:
+ * USABLE, BOOTLOADER_RECLAIMABLE entries are page-aligned and non-overlapping, asserted in init. */
 
-static uint8_t *bitmap;             /* one bit per frame; 1 = used, 0 = free */
+static uint8_t *bitmap;             /* 1 = used, 0 = free */
 static size_t   bitmap_bytes;
 static size_t   total_frames;
 static size_t   free_frames;
+static size_t   alloc_cursor;       /* scan hint, wraps */
 
-/* Highest physical address any usable region reaches. Determines bitmap size. */
-static uint64_t highest_usable_addr;
-
-/*  bitmap primitives
- *
- * Bit i of the bitmap corresponds to frame i (physical address i * PAGE_SIZE).
- * The byte holding bit i is bitmap[i / 8], and the bit within that byte is (i % 8). 0 = free, 1 = used. */
+/*  bitmap primitives  */
 
 static inline bool frame_is_used(size_t frame) {
     return (bitmap[frame / 8] >> (frame % 8)) & 1;
@@ -38,21 +31,16 @@ static inline void frame_mark_free(size_t frame) {
     bitmap[frame / 8] &= (uint8_t)~(1u << (frame % 8));
 }
 
-/* Mark `count` frames starting at `frame` used or free. */
+/* Bounds-checked. Refuses silently rather than corrupting the bitmap. */
 static void frames_mark_used(size_t frame, size_t count) {
+    if (frame >= total_frames || count > total_frames - frame)
+        return;
     for (size_t i = 0; i < count; i++)
         frame_mark_used(frame + i);
 }
 
-// helper (not used)
-//static void frames_mark_free(size_t frame, size_t count) {
-//    for (size_t i = 0; i < count; i++)
-//        frame_mark_free(frame + i);
-//}
-
 /*  init  */
 
-/* First pass: find the highest usable address across all USABLE entries. */
 static uint64_t find_highest_usable(struct limine_memmap_response *map) {
     uint64_t highest = 0;
     for (size_t i = 0; i < map->entry_count; i++) {
@@ -66,8 +54,8 @@ static uint64_t find_highest_usable(struct limine_memmap_response *map) {
     return highest;
 }
 
-/* Second pass: reserve every frame the bitmap will occupy, once it's placed.
- * Called after bitmap and bitmap_bytes are set. */
+/* Caller guarantees the bitmap frames are free. Today that holds because
+ * placement runs after Pass 3 has freed every USABLE frame. */
 static void reserve_bitmap_frames(void) {
     uint64_t bitmap_phys = pmm_virt_to_phys(bitmap);
     size_t start = (size_t)(bitmap_phys / PMM_PAGE_SIZE);
@@ -76,7 +64,6 @@ static void reserve_bitmap_frames(void) {
     free_frames -= count;
 }
 
-/* Third pass: reserve the kernel image and the framebuffer, using the map. */
 static void reserve_special_regions(struct limine_memmap_response *map) {
     for (size_t i = 0; i < map->entry_count; i++) {
         const struct limine_memmap_entry *e = map->entries[i];
@@ -87,21 +74,17 @@ static void reserve_special_regions(struct limine_memmap_response *map) {
         uint64_t start_addr = e->base;
         uint64_t end_addr   = e->base + e->length;
 
-        /* Round start down, end up, so partial pages are covered. */
         size_t start_frame = (size_t)(start_addr / PMM_PAGE_SIZE);
         size_t end_frame   = (size_t)((end_addr + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE);
 
-        for (size_t f = start_frame; f < end_frame; f++) {
-            if (f < total_frames && !frame_is_used(f)) {
+        for (size_t f = start_frame; f < end_frame && f < total_frames; f++) {
+            if (!frame_is_used(f)) {
                 frame_mark_used(f);
                 free_frames--;
             }
         }
     }
 }
-
-
-/* init */
 
 void pmm_init(void) {
     if (!boot_memory_ok())
@@ -110,19 +93,19 @@ void pmm_init(void) {
     struct limine_memmap_response *map = boot_memmap();
     uint64_t hhdm = boot_hhdm_offset();
 
-    /* Pass 1: how high does usable memory go? Determines bitmap size. */
-    highest_usable_addr = find_highest_usable(map);
+    /* Pass 1: size the bitmap from the highest usable byte. Round up so the
+     * frame holding the tail of a non-aligned region is covered. */
+    uint64_t highest_usable_addr = find_highest_usable(map);
     if (highest_usable_addr == 0)
         PANIC("PMM has no usable memory regions");
 
-    total_frames = (size_t)(highest_usable_addr / PMM_PAGE_SIZE);
+    total_frames = (size_t)((highest_usable_addr + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE);
     bitmap_bytes = (total_frames + 7) / 8;
 
-    /* Pass 2: place the bitmap in the first USABLE region with enough room.
-     *
-     * Align the candidate base up first, then check the aligned base plus the bitmap size against the entry's end.
-     * A USABLE entry is required to be page-aligned,
-     * but doing the alignment first means a bootloader that violates the guarantee cannot cause the bitmap to extend past the entry. */
+    /* Pass 2: place the bitmap in the first USABLE region that fits.
+     * Align the candidate base up first, then check against the entry's end,
+     * so a bootloader that violates the alignment guarantee can't push the
+     * bitmap past the entry. */
     size_t bitmap_pages = (bitmap_bytes + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE;
     uint64_t bitmap_span = (uint64_t)bitmap_pages * PMM_PAGE_SIZE;
 
@@ -132,8 +115,6 @@ void pmm_init(void) {
             continue;
 
         uint64_t base = (e->base + PMM_PAGE_SIZE - 1) & ~(uint64_t)(PMM_PAGE_SIZE - 1);
-        /* Reject if the aligned base is already at or past the entry's end,
-         * or if the bitmap would not fit before the end. */
         if (base >= e->base + e->length)
             continue;
         if (bitmap_span > (e->base + e->length) - base)
@@ -146,7 +127,7 @@ void pmm_init(void) {
     if (bitmap == NULL)
         PANIC("PMM has no usable region large enough for the bitmap");
 
-    /* Pass 3: mark everything used, then clear usable regions. */
+    /* Pass 3: all used, then clear USABLE regions. */
     for (size_t i = 0; i < bitmap_bytes; i++)
         bitmap[i] = 0xFF;
     free_frames = 0;
@@ -156,12 +137,11 @@ void pmm_init(void) {
         if (e->type != LIMINE_MEMMAP_USABLE)
             continue;
 
-        /* Assert the alignment guarantee for usable entries. */
         if ((e->base & (PMM_PAGE_SIZE - 1)) != 0)
             PANIC("PMM usable regions are not page-aligned");
 
         size_t start_frame = (size_t)(e->base / PMM_PAGE_SIZE);
-        size_t end_frame   = (size_t)((e->base + e->length) / PMM_PAGE_SIZE);
+        size_t end_frame   = (size_t)((e->base + e->length + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE);
 
         for (size_t f = start_frame; f < end_frame && f < total_frames; f++) {
             if (frame_is_used(f)) {
@@ -171,17 +151,16 @@ void pmm_init(void) {
         }
     }
 
-    /* Reserve the bitmap itself. */
     reserve_bitmap_frames();
-
-    /* Reserve the kernel image and the framebuffer. */
     reserve_special_regions(map);
 
-    /* Reserve frame 0, so a returned physical address of 0 is unambiguous. */
+    /* Frame 0 stays reserved so pmm_alloc() returning 0 is unambiguously "out". */
     if (!frame_is_used(0)) {
         frame_mark_used(0);
         free_frames--;
     }
+
+    alloc_cursor = 0;
 
     klog("→ pmm_init() allocated %zu frames total, of which %zu are free (%zu MiB)\n",
             total_frames, free_frames,
@@ -198,19 +177,27 @@ uint64_t pmm_alloc_contig(size_t count) {
     if (count == 0 || count > free_frames)
         return 0;
 
-    /* Scan for `count` consecutive clear bits.
-     * The inner loop breaks as soon as a used frame is found,
-     * so the common case (many free frames in a row) is fast. */
+    /* Two-segment scan from alloc_cursor: [cursor, total) then [0, cursor).
+     * Run state carries across the wrap. */
     size_t run = 0;
-    for (size_t f = 0; f < total_frames; f++) {
+    size_t start = 0;
+
+    for (size_t scanned = 0; scanned < total_frames; scanned++) {
+        size_t f = alloc_cursor + scanned;
+        if (f >= total_frames)
+            f -= total_frames;
+
         if (frame_is_used(f)) {
             run = 0;
             continue;
         }
         if (++run == count) {
-            size_t start = f + 1 - count;
+            start = f + 1 - count;
+            if (f + 1 < count)         /* wrapped during the run */
+                start = total_frames - (count - (f + 1));
             frames_mark_used(start, count);
             free_frames -= count;
+            alloc_cursor = (start + count) % total_frames;
             return (uint64_t)start * PMM_PAGE_SIZE;
         }
     }
@@ -221,16 +208,15 @@ void pmm_free(uint64_t phys, size_t count) {
     if (phys == 0 || count == 0)
         return;
     if ((phys & (PMM_PAGE_SIZE - 1)) != 0)
-        return;     /* misaligned: refuse rather than corrupt the bitmap */
-
+        return;
     size_t start = (size_t)(phys / PMM_PAGE_SIZE);
-    if (start + count > total_frames)
-        return;     /* out of range */
+    if (start >= total_frames || count > total_frames - start)
+        return;
 
     for (size_t i = 0; i < count; i++) {
         size_t f = start + i;
         if (!frame_is_used(f))
-            continue;   /* already free; idempotent */
+            continue;
         frame_mark_free(f);
         free_frames++;
     }
@@ -238,6 +224,7 @@ void pmm_free(uint64_t phys, size_t count) {
 
 /*  HHDM helpers  */
 
+/* Both are only valid for pointers inside the HHDM window. */
 void *pmm_phys_to_virt(uint64_t phys) {
     return (void *)(phys + boot_hhdm_offset());
 }
@@ -245,8 +232,6 @@ void *pmm_phys_to_virt(uint64_t phys) {
 uint64_t pmm_virt_to_phys(const void *virt) {
     return (uint64_t)virt - boot_hhdm_offset();
 }
-
-/*  stats  */
 
 struct pmm_stats pmm_get_stats(void) {
     struct pmm_stats s = {

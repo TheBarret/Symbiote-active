@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <core/version.h>
 #include <core/console.h>
 #include <core/heap.h>
 #include <core/keyboard.h>
@@ -21,8 +22,9 @@ static int tui_w = 0;
 static int tui_h = 0;
 
 /* Default dimensions */
-#define TUI_W 80
-#define TUI_H 25
+// Moved to: core/config.h
+//#define TUI_W 100
+//#define TUI_H 25
 
 static const char tui_enter[] = "\x1b[0m\x1b[2J\x1b[H\x1b[?25l";
 static const char tui_leave[] = "\x1b[0m\x1b[2J\x1b[H\x1b[?25h";

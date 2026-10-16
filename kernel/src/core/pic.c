@@ -1,4 +1,3 @@
-#include "klog.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <core/cpu.h>
@@ -18,7 +17,6 @@
 #define ICW1_INIT      0x10
 #define ICW1_ICW4      0x01
 #define ICW4_8086      0x01
-
 
 #define LAPIC_VA     (VMM_DYNAMIC_BASE + 0x200000ull)   /* clear of vmtest's page */
 #define LAPIC_SVR    (0x0F0 / 4)
@@ -41,7 +39,7 @@ static void lapic_virtual_wire(void) {
         return;     /* APIC off: the PIC already reaches the CPU. x2APIC: registers are MSRs, not handled yet */
     uint64_t phys = (((uint64_t)hi << 32) | lo) & 0x000ffffffffff000ull;
     if (!vmm_map(LAPIC_VA, phys, VMM_WRITE | VMM_NX | VMM_NOCACHE)) {
-        /* If the map fails, IRQs never arrive and the only clue would be the absence of activity, warn user. */
+        /* If the map fails, IRQs never arrive and the only clue would be the absence of activity. */
         klog_warning("→ lapic_virtual_wire(): map failed, PIC-direct only\n");
         return;
     }
@@ -73,9 +71,10 @@ void pic_init(void) {
     lapic_virtual_wire();
 }
 
-/* Pic_mask and pic_unmask now bracket their read-modify-write of irq_mask_bits and the two write_masks() outb's in an IRQ-save region.
- * Without it a nested (or, later, SMP) caller can lose a bit update or interleave the two outb's, leaving the shadow and the hardware out of step.
- * Single-core boot does not hit this today; the cost of the fix is two instructions and the cost of the bug later is a mystery. */
+/* pic_mask and pic_unmask bracket their read-modify-write of irq_mask_bits
+ * and the two write_masks() outb's in an IRQ-save region. Without it a
+ * nested (or, later, SMP) caller can lose a bit update or interleave the
+ * two outb's, leaving the shadow and the hardware out of step. */
 
 void pic_mask(int irq) {
     if (irq < 0 || irq > 15)
@@ -86,6 +85,10 @@ void pic_mask(int irq) {
     cpu_irq_restore(flags);
 }
 
+/* Unmasking a slave line opens the IRQ2 cascade. Masking a slave line does
+ * NOT re-mask the cascade: IRQ2 stays open even if no slave IRQ is unmasked.
+ * Harmless (the slave cannot assert without its own line unmasked), but the
+ * shadow mask no longer reflects a pure AND of the slave IRQs. */
 void pic_unmask(int irq) {
     if (irq < 0 || irq > 15)
         return;
@@ -97,9 +100,9 @@ void pic_unmask(int irq) {
     cpu_irq_restore(flags);
 }
 
-/* Bounds check added. pic_mask and pic_unmask already guard the same range; pic_eoi was the odd one out.
- * Calling it with an out-of-range irq would send an EOI to one or both controllers with no corresponding interrupt,
- * which can unmask a pending line early. */
+/* Bounds check: pic_mask and pic_unmask already guard the same range.
+ * An out-of-range EOI would be sent to one or both controllers with no
+ * corresponding interrupt, which can unmask a pending line early. */
 void pic_eoi(int irq) {
     if (irq < 0 || irq > 15)
         return;
@@ -107,6 +110,10 @@ void pic_eoi(int irq) {
         outb(PIC2_CMD, PIC_EOI);
     outb(PIC1_CMD, PIC_EOI);
 }
+
+/* Spurious IRQ7 / IRQ15. Occurs when a device drops its request line before
+ * the CPU can acknowledge it. The ISR (In-Service Register) is read via OCW3;
+ * a zero in the top bit means no interrupt was actually in service. */
 
 bool pic_irq_is_spurious(int irq) {
     if (irq == 7) {
