@@ -58,6 +58,10 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 
 <img width="1004" height="547" alt="Environment" src="https://github.com/user-attachments/assets/4343e103-5507-4315-a907-386609a3aab7" />  
 
+<img width="1106" height="663" alt="stresstest" src="https://github.com/user-attachments/assets/d3729a87-c8b1-4699-9ef7-f3c7ead87f82" />
+
+*stress testing environment module, overloading it with overflow intentionally without breaking*  
+
 
 - `core/timer.h`, `core/timer.c`:  
   added helpers for milliseconds to timer ticks conversions (`ms_to_ticks_floor`, `ms_to_ticks_ceil`,`ms_to_ticks_round`).
