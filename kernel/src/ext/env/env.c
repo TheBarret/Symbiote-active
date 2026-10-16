@@ -390,14 +390,14 @@ static int sub_stats(int argc, const char *const *argv) {
     kprintf("env stats:\n");
     kprintf("  slots      : %zu used / %zu\n", in.count, in.capacity);
     kprintf("  bytes      : %zu used / %zu\n", in.used_bytes, in.max_bytes);
-    kprintf("  timer      : %s\n", in.timer_attached ? "attached" : "none (no TTL, no sweeping)");
-    kprintf("  ops        : set=%llu get=%llu peek=%llu unset=%llu\n",
+    kprintf("  schedular  : %s\n", in.timer_attached ? "attached" : "disabled");
+    kprintf("  operations : set=%llu get=%llu peek=%llu unset=%llu\n",
             (unsigned long long)in.n_set, (unsigned long long)in.n_get,
             (unsigned long long)in.n_peek, (unsigned long long)in.n_unset);
     kprintf("  reclaimed  : access=%llu time=%llu space=%llu explicit=%llu\n",
             (unsigned long long)in.n_reclaim_access, (unsigned long long)in.n_reclaim_time,
             (unsigned long long)in.n_reclaim_space,  (unsigned long long)in.n_reclaim_explicit);
-    kprintf("  sweeps     : %llu\n", (unsigned long long)in.n_sweeps);
+    kprintf("  purges     : %llu\n", (unsigned long long)in.n_sweeps);
     return CMD_OK;
 }
 
@@ -472,7 +472,7 @@ static int cmd_env(const struct cmd_args *a) {
     return CMD_USAGE;
 }
 
-SYM_COMMAND(env, "<subcmd:str> [args:str...]", "Environment variable store tool", cmd_env);
+SYM_COMMAND(env, "<subcmd:str> [args:str...]", "Environment tool", cmd_env);
 
 /* extension greeter */
 static int env_ext_init(void) { return 0; }
