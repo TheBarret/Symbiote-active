@@ -9,10 +9,6 @@ For this I need to develop a custom dynamic linker device that can map and manag
 The interpreter will use the bus and dynamic linker to convey operations with evaluated parameters.  
 Basic data types such as, `int, string` will be slowly added in to get the basics.  
 
-The variables will be stored in the environment storage, the `MASK` bitmask field (`u32`) will be used as metadata field.  
-Embedding data types, locks, and other various flag-based information, the interpreter can query per `Namespace, Name` and `Mask`.  
-The interpreter does not have to worry about disposing the scope data, this is done by the environment purging scheduler.  
-
 ## Syntax Style
 
 Pseudo `Hello, World!`:  
