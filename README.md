@@ -3,13 +3,28 @@
 
 Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
 
-The plan is to improve the core, debug the environment codebase, followed by a featured custom interpreter,  
-For this I need to develop a custom dynamic linker device that can map and manage all the `ops_*` device pointers safely.  
+# Active & Planned Features
 
-The interpreter will use the bus and dynamic linker to convey operations with evaluated parameters.  
-Basic data types such as, `int, string` will be slowly added in to get the basics.  
+**Environment Broker ("ring collector")**  
 
-## Syntax Style
+A bounded, fixed-capacity table of `(namespace, name) -> value` entries.  
+Intended as the kernel's read-mostly information surface: system, session, shell state, flags, paths.   
+Ring collector is classified as virtual devices, it can be discovered by extension or scripted objects, through `bus_env()`.  
+
+Mechanical control points (owned by env):  
+- access budget : 0 = unlimited; N > 0 = entry is reclaimed after N get()s.  
+                  peek() and stat() never consume budget.   
+
+- Ttl ticks     : `0 = no expiry`; otherwise entry expires ttl ticks after set.  
+
+- Importance    : `0 = persistent` Under space pressure the `5-10` importance objects are evicted first, then the least recently accessed.  
+
+- Mask          : `mask.h` defined classification field, searchable through `list_by_mask()` / `count_by_mask()`.  
+                  Holds universal and arbitrary metrics about what it is and who owns it, plus device specific event metrics.  
+
+**Interpreter**  
+
+A custom syntax, very basic, inspired from (MS) QBasic, that lets you address devices within the kernel.  
 
 Pseudo `Hello, World!`:  
 ```lua
@@ -29,7 +44,7 @@ Pseudo `Timer`-event:
     }
 ```
 
-**0.1.1** - Overhaul Core & Environment Layer  
+**0.1.1** - Major overhaul of the core
 
 <img width="1290" height="850" alt="image" src="https://github.com/user-attachments/assets/abc68e05-4359-46e1-9728-7f0f8246e40e" />  
 
