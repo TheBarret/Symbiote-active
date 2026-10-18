@@ -73,6 +73,7 @@ void timer_init(uint32_t hz) {
         .version      = 1,
         .ops          = &timer_bus_ops,
         .private_data = NULL,
+        .owner_id     = 2,
     };
     bus_register(&dev);
     bus_test("timer");

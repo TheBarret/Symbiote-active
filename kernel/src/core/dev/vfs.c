@@ -205,6 +205,7 @@ void vfs_init(void) {
         .version      = 1,
         .ops          = &vfs_impl,
         .private_data = NULL,
+        .owner_id     = 4,
     };
     bus_register(&dev);
     bus_test("vfs");

@@ -30,6 +30,7 @@ void console_init(void) {
         .version      = 1,
         .ops          = (void *)&console_bus_ops,
         .private_data = NULL,
+        .owner_id     = 1,
     };
     bus_register(&dev);
     bus_test("console");

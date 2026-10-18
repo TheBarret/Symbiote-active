@@ -571,9 +571,10 @@ void env_init(size_t max_entries, size_t max_bytes) {
     struct bus_device dev = {
         .name         = "env",
         .class        = BUS_CLASS_ENV,
-        .version      = 2,                 /* get/peek now copy out; stat/info/count_by_mask added */
+        .version      = 1,
         .ops          = &env_bus_ops,
         .private_data = e,
+        .owner_id     = 3,
     };
     bus_register(&dev);
     bus_test("env");
