@@ -55,7 +55,8 @@ struct bus_device {
     enum bus_class class;
     uint16_t version;         /* module revision, exposed to scripts */
     const void *ops;          /* struct <class>_ops *, cast on lookup; must not be NULL */
-    void    *private_data;    /* backend state, opaque to the bus */
+    void *private_data;    /* backend state, opaque to the bus */
+    uint16_t owner_id;      /* unique identifier  */
 };
 
 /* Zero the table. First thing after serial_init() in kmain,
@@ -95,5 +96,14 @@ const struct vfs_ops *bus_vfs(void);
 /* Number of registered devices, and iteration for `lsbus`. */
 size_t bus_count(void);
 const struct bus_device *bus_at(size_t index);
+
+
+/* Returns the manually assigned owner ID of a device. */
+ static inline uint16_t bus_owner_id(const struct bus_device *dev) {
+    return (dev != NULL) ? dev->owner_id : BUS_CLASS_NONE;
+}
+
+void bus_settle(void);
+void bus_publish_manifest(void);
 
 #endif

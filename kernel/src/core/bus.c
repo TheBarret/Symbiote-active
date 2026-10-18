@@ -3,8 +3,11 @@
 #include <core/dev/console.h>
 #include <core/dev/timer.h>
 #include <core/dev/vfs.h>
+#include <core/dev/env.h>
+#include <core/kprintf.h>
 #include <core/klog.h>
 #include <core/bus.h>
+#include <core/mask.h>
 
 /* Software bus: a name -> ops registry, linear with the core.
  *
@@ -17,6 +20,7 @@
 
 static struct bus_device bus_table[BUS_MAX_DEVICES];
 static size_t bus_used;
+static bool   bus_ready;
 
 void bus_init(void) {
     for (size_t i = 0; i < BUS_MAX_DEVICES; i++) {
@@ -25,6 +29,7 @@ void bus_init(void) {
         bus_table[i].version = 0;
         bus_table[i].ops = NULL;
         bus_table[i].private_data = NULL;
+        bus_table[i].owner_id = 5;
     }
     bus_used = 0;
     klog_bus("Initialized (max=%u)\n", BUS_MAX_DEVICES);
@@ -113,4 +118,39 @@ const struct bus_device *bus_at(size_t index) {
     if (index >= bus_used)
         return NULL;
     return &bus_table[index];
+}
+
+
+/* settlers */
+
+void bus_settle(void) {
+    if (bus_ready) return; // avoid overlap
+    bus_publish_manifest();
+    bus_ready = true;
+    klog_bus("→ %zu devices, manifest published\n", bus_used);
+}
+void bus_publish_manifest(void) {
+    const struct env_ops *env = bus_env();
+    if (env == NULL) return;
+
+    for (size_t i = 0; i < bus_used; i++) {
+        const struct bus_device *dev = &bus_table[i];
+
+        char ns[64];
+        ksnprintf(ns, sizeof(ns), "kernel.dev.%s", dev->name);
+
+        uint32_t m = env_mask_build((uint16_t)dev->owner_id, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
+
+        char buf_id[16];
+        ksnprintf(buf_id, sizeof(buf_id), "%u", (unsigned)dev->owner_id);
+        env->set(ns, "id", buf_id, 0, 0, 0, m);
+
+        char buf_class[16];
+        ksnprintf(buf_class, sizeof(buf_class), "%u", (unsigned)dev->class);
+        env->set(ns, "class", buf_class, 0, 0, 0, m);
+
+        char buf_ver[16];
+        ksnprintf(buf_ver, sizeof(buf_ver), "%u", (unsigned)dev->version);
+        env->set(ns, "version", buf_ver, 0, 0, 0, m);
+    }
 }
