@@ -9,7 +9,7 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 
 A bounded, fixed-capacity table of `(namespace, name) -> value` entries.  
 Intended as the kernel's read-mostly information surface: system, session, shell state, flags, paths.   
-Ring collector is classified as virtual devices, it can be discovered by extension or scripted objects, through `bus_env()`.  
+Ring collector is classified as a virtual device, it can be discovered by extension or scripted objects, through `bus_env()`.  
 
 Mechanical control points (owned by env):  
 - access budget : 0 = unlimited; N > 0 = entry is reclaimed after N get()s.  
