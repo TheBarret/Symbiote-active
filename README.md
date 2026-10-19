@@ -23,16 +23,29 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
   asynchronously by a timer-driven sweeper when their time budget passes, and under space pressure by an importance-ordered eviction policy.
   The device is registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
 
-- `ext/envtool/`: added the `envtool` using the `TUI` engine to browse and inspect the `environment` variable store.  
-- `ext/btool/`: added the `btool` extension app for inspecting the bus registry.
+- `ext/envtool/`: added the `envtool` using the `TUI` engine to browse inspect and stress test the `environment` variable store.
+
+- `mask.h`: added contracts and functions that can encode and decode the `MASK` bit field used in the `env.h`;  
+  Bit layout:
+  ```bash
+        | 31    24 | 23  20 | 19  16 | 15              0 |
+        +----------+--------+--------+-------------------+
+        |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
+        | (8 bits) | (4 bit)| (4 bit)|    (16 bits)      |
+        +----------+--------+--------+-------------------+
+   ````
+
+- `bus.c`: added `manifest` function, writes a driver information and pushes them on the `environment` store.
+  
+  <img width="755" height="429" alt="image" src="https://github.com/user-attachments/assets/b4157208-0a1d-435f-99a8-2322d71aa797" />   
+
+- `tui.c`: added `tui_fetch_resolution()`, uses the `env` store to obtain framebuffer width and height, there is a known bug where full resolution creates incorrect behavior.  
+  *(a temporary make-shift fix by scaling the `col / row` down by 15% seems to work for now)*  
+
 
 # Active & Planned Features
 
 **Environment Broker ("ring collector")**  
-
-<img width="1104" height="634" alt="envtool" src="https://github.com/user-attachments/assets/06935c95-49ff-4bc8-880a-b77c71111535" />  
-
-
 
 A bounded, fixed-capacity table of `(namespace, name) -> value` entries.  
 Intended as the kernel's read-mostly information surface: system, session, shell state, flags, paths.   
