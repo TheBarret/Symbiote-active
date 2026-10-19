@@ -42,7 +42,9 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 - `tui.c`: added `CP437` charsets, for primitive panels.
 - `ext/envtool/envtool.c`: added `CP437` support.
 
-<img width="777" height="403" alt="envtool" src="https://github.com/user-attachments/assets/3d4ad315-ffd8-43a3-aedf-8735cc10d21e" />  
+<img width="1286" height="863" alt="envtool" src="https://github.com/user-attachments/assets/867f6399-6500-4c16-807b-9f23b271023e" />
+
+
 
 
 # Active & Planned Features
