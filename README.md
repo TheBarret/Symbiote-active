@@ -35,7 +35,7 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
         +----------+--------+--------+-------------------+
    ````
 
-- `bus.c`: added `manifest` function, writes a driver information and pushes them on the `environment` store.
+- `bus.c`: added `manifest` function, catalogues the entire bus registry, pushes information on the `environment` store.  
   
   <img width="755" height="429" alt="image" src="https://github.com/user-attachments/assets/b4157208-0a1d-435f-99a8-2322d71aa797" />   
 
