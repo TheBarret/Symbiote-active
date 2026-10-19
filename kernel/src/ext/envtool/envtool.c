@@ -14,10 +14,11 @@
 #include <core/ext.h>
 #include <core/bus.h>
 #include <core/tui.h>
+#include <core/mask.h>
 #include <ext/envtool/envtool.h>
 
 #define LEFT_W_DEFAULT   32
-#define MAX_CACHED_ITEMS 64
+#define MAX_CACHED_ITEMS 256
 #define ENVTOOL_DEFAULT_N 100
 #define ENVTOOL_MAX_N     4096
 
@@ -63,6 +64,21 @@ static void sanitize(char *s) {
         if (c < 0x20 || c == 0x7f)
             *s = '.';
     }
+}
+
+static const char *env_flags_str(uint8_t flags, char *buf) {
+    buf[0] = '\0';
+    if (flags == 0) {
+        strcpy(buf, "none");
+        return buf;
+    }
+
+    if (flags & (ENV_FLAG_READONLY >> ENV_MASK_FLAG_SHIFT))  strcat(buf, "readonly ");
+    if (flags & (ENV_FLAG_SECRET >> ENV_MASK_FLAG_SHIFT))    strcat(buf, "secret ");
+    if (flags & (ENV_FLAG_CACHEABLE >> ENV_MASK_FLAG_SHIFT)) strcat(buf, "cacheable ");
+    if (flags & (ENV_FLAG_PINNED >> ENV_MASK_FLAG_SHIFT))    strcat(buf, "pinned ");
+
+    return buf;
 }
 
 /* Loaders
@@ -133,7 +149,28 @@ static void draw_detail(const struct envtool_state *s, int cx, int cy, int ymax)
     FIELD("length", "%u bytes", (unsigned)st->value_len);
     cy++;
 
+    /* mask data */
     FIELD("mask", "0x%08x", (unsigned)st->mask);
+    uint8_t owner = env_mask_owner(st->mask);
+    uint8_t type  = env_mask_type(st->mask);
+    uint8_t flags = env_mask_flags(st->mask);
+    uint16_t priv = env_mask_priv(st->mask);
+
+    /* Universal bits */
+    FIELD("mask owner", "%u", (unsigned)owner);
+    FIELD("mask type", "%u (%s)", (unsigned)type, env_type_str(type));
+
+    char flags_buf[32];
+    FIELD("mask flags", "%s", env_flags_str(flags, flags_buf));
+
+    /* Private bits */
+    if (priv != 0)
+        FIELD("mask private", "0x%04x", (unsigned)priv);
+    else
+        FIELD("mask private", "none");
+
+    /* others  */
+
     FIELD("eviction", "%u / %u", (unsigned)st->importance, (unsigned)ENV_IMPORTANCE_MAX);
 
     if (st->access_remaining == 0)
@@ -163,8 +200,8 @@ static void draw_detail(const struct envtool_state *s, int cx, int cy, int ymax)
     const struct env_info *in = &s->info;
     cy++;
     LINE(HEAD_ATTR, "Environment status:");
-    FIELD("slots", "used %zu|%zu", in->count, in->capacity);
-    FIELD("bytes", "used %zu|%zu", in->used_bytes, in->max_bytes);
+    FIELD("slots", "used %zu \\ %zu", in->count, in->capacity);
+    FIELD("bytes", "used %zu \\ %zu", in->used_bytes, in->max_bytes);
     FIELD("timer", "%s", in->timer_attached ? "attached" : "disabled");
     FIELD("ops", "set %llu, get %llu, peek %llu, unset %llu",
           (unsigned long long)in->n_set, (unsigned long long)in->n_get,
@@ -207,13 +244,24 @@ static void draw(struct tui_view *v) {
     tui_box(list_frame,   TUI_ATTR(TUI_FG_WHITE, 0));
     tui_box(detail_frame, TUI_ATTR(TUI_FG_WHITE, 0));
 
+    /* Clear the inner area of the detail pane explicitly to prevent text smearing/ghosting */
+    for (int y = detail_frame.y + 1; y < detail_frame.y + detail_frame.h - 1; y++) {
+        tui_text(detail_frame.x + 1, y, TUI_ATTR_DEFAULT, "%-*s", detail_frame.w - 2, "");
+    }
+
     /* Left pane: list items */
     int rows = list_frame.h - 2;
     if (rows < 1) rows = 1;
 
     if (s->count == 0) {
+        s->selected = 0;
+        s->top = 0;
         tui_text(2, 3, TUI_ATTR(TUI_FG_YELLOW, 0), "(env store is empty)");
     } else {
+        /* Strict boundary clamping */
+        if (s->selected >= s->count)
+            s->selected = s->count > 0 ? s->count - 1 : 0;
+
         if (s->selected < s->top)
             s->top = s->selected;
         if (s->selected >= s->top + (size_t)rows)
@@ -221,12 +269,16 @@ static void draw(struct tui_view *v) {
 
         for (int i = 0; i < rows; i++) {
             size_t idx = s->top + (size_t)i;
-            if (idx >= s->count) break;
+            if (idx >= s->count) {
+                tui_text(2, 3 + i, TUI_ATTR_DEFAULT, "%-28s", "");
+                continue;
+            }
             const struct env_item *item = &s->items[idx];
 
+            /* Explicit attribute assignment per row to prevent double highlights */
             uint8_t attr = (idx == s->selected)
-                         ? TUI_ATTR(TUI_FG_BLACK, TUI_FG_CYAN)
-                         : TUI_ATTR_DEFAULT;
+                       ? TUI_ATTR(TUI_FG_BLACK, TUI_FG_CYAN)
+                       : TUI_ATTR_DEFAULT;
 
             char display_key[2 * ENV_NAME_MAX + 2];
             ksnprintf(display_key, sizeof(display_key), "%s:%s", item->ns, item->name);
@@ -234,8 +286,8 @@ static void draw(struct tui_view *v) {
         }
     }
 
-    /* Right pane: details of the selected variable, then the device snapshot */
-    if (s->selected >= s->count) {
+    /* Right pane: details of the selected variable */
+    if (s->count == 0 || s->selected >= s->count) {
         tui_text(left_w + 2, 3, TUI_ATTR(TUI_FG_YELLOW, 0), "(no variable selected)");
     } else {
         draw_detail(s, left_w + 2, 3, detail_frame.y + detail_frame.h - 1);
