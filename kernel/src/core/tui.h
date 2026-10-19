@@ -72,10 +72,10 @@ void tui_size(int *w, int *h);
  * the console until tui_flush,
  * out-of-range coordinates are ignored. */
 void tui_clear(uint8_t attr);
-void tui_put(int x, int y, char ch, uint8_t attr);
+void tui_put(int x, int y, unsigned char ch, uint8_t attr);
 void tui_text(int x, int y, uint8_t attr, const char *fmt, ...)
     __attribute__((format(printf, 4, 5)));
-void tui_fill(struct tui_rect r, char ch, uint8_t attr);
+void tui_fill(struct tui_rect r, unsigned char ch, uint8_t attr);
 void tui_box(struct tui_rect r, uint8_t attr);
 
 /* Emit the diff between back and front to the console, then copy back to front. Call once per frame, after drawing.
@@ -104,5 +104,32 @@ void tui_run(struct tui_view *v);
  * left the cursor hidden and the screen stuck in TUI mode.
  * Prefer this over calling tui_run directly. */
 bool tui_run_view(struct tui_view *v);
+
+
+/* CP437 characters to its UTF-8 encoding, or NULL for plain ASCII.
+ * Every glyph below is exactly 3 bytes in UTF-8. */
+#define TUI_H     0xC4  /* ─ */
+#define TUI_V     0xB3  /* │ */
+#define TUI_TL    0xDA  /* ┌ */
+#define TUI_TR    0xBF  /* ┐ */
+#define TUI_BL    0xC0  /* └ */
+#define TUI_BR    0xD9  /* ┘ */
+#define TUI_LT    0xC3  /* ├ */
+#define TUI_RT    0xB4  /* ┤ */
+#define TUI_TT    0xC2  /* ┬ */
+#define TUI_BT    0xC1  /* ┴ */
+#define TUI_X     0xC5  /* ┼ */
+#define TUI_DH    0xCD  /* ═ */
+#define TUI_DV    0xBA  /* ║ */
+#define TUI_DTL   0xC9  /* ╔ */
+#define TUI_DTR   0xBB  /* ╗ */
+#define TUI_DBL   0xC8  /* ╚ */
+#define TUI_DBR   0xBC  /* ╝ */
+#define TUI_FULL  0xDB  /* █ */
+#define TUI_UPPER 0xDF  /* ▀ */
+#define TUI_LOWER 0xDC  /* ▄ */
+#define TUI_SHADE1 0xB0 /* ░ */
+#define TUI_SHADE2 0xB1 /* ▒ */
+#define TUI_SHADE3 0xB2 /* ▓ */
 
 #endif

@@ -12,8 +12,11 @@
 #include <core/tui.h>
 #include <core/mask.h>
 
+#define TUI_FLUSH_BUF 4096
+#define TUI_FLUSH_DRAIN_AT (TUI_FLUSH_BUF - 64) /* Generous safety headroom */
+
 struct cell {
-    char    ch;
+    unsigned char ch;
     uint8_t attr;
 };
 
@@ -78,23 +81,13 @@ bool tui_begin(void) {
     /* Prevent double-allocation leaks if already active */
     if (front || back) { tui_end(); }
 
-    /* set default fallbacks if env is unavailable */
-    tui_w = 100;
-    tui_h = 25;
-
-    /* ask env for resolution variables */
-    int px_width = 0, px_height = 0;
-    /* Attempt to fetch dynamic pixel bounds from the environment broker */
-    if (tui_fetch_resolution("kernel.dev.console", "width", &px_width)) {
-        tui_w = px_width / 8;  /* Standard 8px font width cell */
-        tui_w = (tui_w * 85) / 100; /* scaler */
-    }
-    if (tui_fetch_resolution("kernel.dev.console", "height", &px_height)) {
-        tui_h = px_height / 16; /* Standard 16px font height cell */
-        tui_h = (tui_h * 85) / 100; /* scaler */
-    }
-    if (tui_w < 80)  tui_w = 80;
-    if (tui_h < 24)  tui_h = 24;
+    /* get dimension from env store or fallback on defaults */
+    tui_w = 100; tui_h = 25;                     /* fallback = 100x25 */
+    int c = 0, r = 0;
+    if (tui_fetch_resolution("kernel.dev.console", "cols", &c)) tui_w = c;
+    if (tui_fetch_resolution("kernel.dev.console", "rows", &r)) tui_h = r;
+    if (tui_w < 80) tui_w = 80; // validate both
+    if (tui_h < 24) tui_h = 24;
 
     /* continue TUI init */
     size_t cells = (size_t)tui_w * (size_t)tui_h;
@@ -147,7 +140,7 @@ void tui_clear(uint8_t attr) {
     }
 }
 
-void tui_put(int x, int y, char ch, uint8_t attr) {
+void tui_put(int x, int y,unsigned char ch, uint8_t attr) {
     if (!back || !in_bounds(x, y))
         return;
     struct cell *c = cell_at(back, x, y);
@@ -178,7 +171,7 @@ void tui_text(int x, int y, uint8_t attr, const char *fmt, ...) {
     }
 }
 
-void tui_fill(struct tui_rect r, char ch, uint8_t attr) {
+void tui_fill(struct tui_rect r,unsigned char ch, uint8_t attr) {
     if (!back)
         return;
     for (int y = r.y; y < r.y + r.h; y++) {
@@ -194,28 +187,59 @@ void tui_box(struct tui_rect r, uint8_t attr) {
     int x0 = r.x, y0 = r.y;
     int x1 = r.x + r.w - 1, y1 = r.y + r.h - 1;
 
-    tui_put(x0, y0, '+', attr);
-    tui_put(x1, y0, '+', attr);
-    tui_put(x0, y1, '+', attr);
-    tui_put(x1, y1, '+', attr);
+    tui_put(x0, y0, TUI_TL, attr);
+    tui_put(x1, y0, TUI_TR, attr);
+    tui_put(x0, y1, TUI_BL, attr);
+    tui_put(x1, y1, TUI_BR, attr);
 
     for (int x = x0 + 1; x < x1; x++) {
-        tui_put(x, y0, '-', attr);
-        tui_put(x, y1, '-', attr);
+        tui_put(x, y0, TUI_H, attr);
+        tui_put(x, y1, TUI_H, attr);
     }
     for (int y = y0 + 1; y < y1; y++) {
-        tui_put(x0, y, '|', attr);
-        tui_put(x1, y, '|', attr);
+        tui_put(x0, y, TUI_V, attr);
+        tui_put(x1, y, TUI_V, attr);
     }
 }
-
-#define TUI_FLUSH_BUF 4096
-#define TUI_FLUSH_DRAIN_AT (TUI_FLUSH_BUF - 64) /* Generous safety headroom */
 
 static inline void buf_append(char *out, size_t *len, size_t max, const char *src, size_t srclen) {
     if (*len + srclen <= max) {
         memcpy(out + *len, src, srclen);
         *len += srclen;
+    }
+}
+
+/* CP437 characters to its UTF-8 encoding, or NULL for plain ASCII.
+ * Every glyph below is exactly 3 bytes in UTF-8. */
+static const char *cp437_utf8(unsigned char c) {
+    switch (c) {
+    /* single lines */
+    case 0xC4: return "\xE2\x94\x80";   /* ─ */
+    case 0xB3: return "\xE2\x94\x82";   /* │ */
+    case 0xDA: return "\xE2\x94\x8C";   /* ┌ */
+    case 0xBF: return "\xE2\x94\x90";   /* ┐ */
+    case 0xC0: return "\xE2\x94\x94";   /* └ */
+    case 0xD9: return "\xE2\x94\x98";   /* ┘ */
+    case 0xC3: return "\xE2\x94\x9C";   /* ├ */
+    case 0xB4: return "\xE2\x94\xA4";   /* ┤ */
+    case 0xC2: return "\xE2\x94\xAC";   /* ┬ */
+    case 0xC1: return "\xE2\x94\xB4";   /* ┴ */
+    case 0xC5: return "\xE2\x94\xBC";   /* ┼ */
+    /* double lines */
+    case 0xCD: return "\xE2\x95\x90";   /* ═ */
+    case 0xBA: return "\xE2\x95\x91";   /* ║ */
+    case 0xC9: return "\xE2\x95\x94";   /* ╔ */
+    case 0xBB: return "\xE2\x95\x97";   /* ╗ */
+    case 0xC8: return "\xE2\x95\x9A";   /* ╚ */
+    case 0xBC: return "\xE2\x95\x9D";   /* ╝ */
+    /* blocks and shades */
+    case 0xDB: return "\xE2\x96\x88";   /* █ */
+    case 0xDF: return "\xE2\x96\x80";   /* ▀ */
+    case 0xDC: return "\xE2\x96\x84";   /* ▄ */
+    case 0xB0: return "\xE2\x96\x91";   /* ░ */
+    case 0xB1: return "\xE2\x96\x92";   /* ▒ */
+    case 0xB2: return "\xE2\x96\x93";   /* ▓ */
+    default:   return NULL;
     }
 }
 
@@ -233,6 +257,13 @@ void tui_flush(void) {
         for (int x = 0; x < tui_w; x++) {
             struct cell *f = cell_at(front, x, y);
             struct cell *b = cell_at(back, x, y);
+
+            /* Writing the last cell advances the cursor off-screen and scrolls. */
+            if (x == tui_w - 1 && y == tui_h - 1) {
+                *f = *b;
+                continue;
+            }
+
             if (f->ch == b->ch && f->attr == b->attr)
                 continue;
 
@@ -277,9 +308,16 @@ void tui_flush(void) {
                 last_attr = b->attr;
             }
 
-            if (len < sizeof out) {
-                out[len++] = b->ch;
-            }
+            //if (len < sizeof out) {
+            //    out[len++] = b->ch;
+            //}
+
+            /* trap special chars */
+            const char *ch_cp437 = cp437_utf8(b->ch);
+            if (ch_cp437)
+                buf_append(out, &len, sizeof out, ch_cp437, 3);
+            else if (len < sizeof out)
+                out[len++] = (char)b->ch;
 
             last_x = x + 1;
             last_y = y;
