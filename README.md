@@ -34,13 +34,15 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
         | (8 bits) | (4 bit)| (4 bit)|    (16 bits)      |
         +----------+--------+--------+-------------------+
    ````
+  *(Flag bits are not enforced as of yet!)*
 
 - `bus.c`: added `manifest` function, catalogues the entire bus registry, pushes information on the `environment` store.  
-  
-  <img width="755" height="429" alt="image" src="https://github.com/user-attachments/assets/b4157208-0a1d-435f-99a8-2322d71aa797" />   
+- `ext/fbcon/fbcon.c` : writes `column, row, width, height` manifest to `env` store.
+- `tui.c`: added `tui_fetch_resolution()`, uses the `env` store to obtain framebuffer width and height.
+- `tui.c`: added `CP437` charsets, for primitive panels.
+- `ext/envtool/envtool.c`: added `CP437` support.
 
-- `tui.c`: added `tui_fetch_resolution()`, uses the `env` store to obtain framebuffer width and height, there is a known bug where full resolution creates incorrect behavior.  
-  *(a temporary make-shift fix by scaling the `col / row` down by 15% seems to work for now)*  
+<img width="777" height="403" alt="envtool" src="https://github.com/user-attachments/assets/3d4ad315-ffd8-43a3-aedf-8735cc10d21e" />  
 
 
 # Active & Planned Features
