@@ -45,9 +45,6 @@ enum bus_class {
     BUS_CLASS_VFS      = 3,   /* virtual filesystem, vfs.c */
     BUS_CLASS_LOG      = 4,   /* kernel logger, console.c */
     BUS_CLASS_ENV      = 5,   /* environment, env.c */
-    BUS_CLASS_DECODER  = 6,   /* environment mask decoders */
-    BUS_CLASS_DEBUG    = 7,   /* planned, debug device */
-    /* grow as devices appear; keep values stable once assigned */
 };
 
 struct bus_device {

@@ -60,6 +60,9 @@ struct tui_rect {
 bool tui_begin(void);
 void tui_end(void);
 
+/* env helper: fetches console width and height */
+bool tui_fetch_resolution(const char *ns, const char *name, int *val_out);
+
 /* Screen size, in cells. Fixed at 80x25 for now;
  * the ops struct has no size query. A later get_size hook would replace this. */
 void tui_size(int *w, int *h);

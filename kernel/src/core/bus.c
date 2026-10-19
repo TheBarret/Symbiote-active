@@ -1,3 +1,4 @@
+#include "klog.h"
 #include <stddef.h>
 #include <lib/string.h>
 #include <core/dev/console.h>
@@ -58,7 +59,7 @@ int bus_register(const struct bus_device *dev) {
 
 int bus_test(const char *name) {
     const struct bus_device *d = bus_find(name);
-    klog_bus("→ Found %s registry: count=%zu, class=%u ops=%s\n",
+    klog_bus("→ %s: count=%zu, class=%u ops=%s\n",
               d ? d->name : "(empty)",
               bus_count(),
               d ? (unsigned)d->class : 0,
@@ -121,36 +122,44 @@ const struct bus_device *bus_at(size_t index) {
 }
 
 
-/* settlers */
+/* finalizer - bus writes manifest of all discovered devices */
 
 void bus_settle(void) {
     if (bus_ready) return; // avoid overlap
     bus_publish_manifest();
     bus_ready = true;
-    klog_bus("→ %zu devices, manifest published\n", bus_used);
 }
+
 void bus_publish_manifest(void) {
     const struct env_ops *env = bus_env();
     if (env == NULL) return;
 
     for (size_t i = 0; i < bus_used; i++) {
         const struct bus_device *dev = &bus_table[i];
-
+        int ret_value;
         char ns[64];
         ksnprintf(ns, sizeof(ns), "kernel.dev.%s", dev->name);
-
         uint32_t m = env_mask_build((uint16_t)dev->owner_id, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
 
+        /* ID */
         char buf_id[16];
         ksnprintf(buf_id, sizeof(buf_id), "%u", (unsigned)dev->owner_id);
-        env->set(ns, "id", buf_id, 0, 0, 0, m);
+        ret_value = env->set(ns, "id", buf_id, 0, 0, 0, m);
+        /* validate */
+        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %u", ret_value); }
 
+        /* CLASS */
         char buf_class[16];
         ksnprintf(buf_class, sizeof(buf_class), "%u", (unsigned)dev->class);
-        env->set(ns, "class", buf_class, 0, 0, 0, m);
+        ret_value = env->set(ns, "class", buf_class, 0, 0, 0, m);
+        /* validate */
+        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %u", ret_value); }
 
+        /* VERSION */
         char buf_ver[16];
         ksnprintf(buf_ver, sizeof(buf_ver), "%u", (unsigned)dev->version);
-        env->set(ns, "version", buf_ver, 0, 0, 0, m);
+        ret_value = env->set(ns, "version", buf_ver, 0, 0, 0, m);
+        /* validate */
+        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %u", ret_value); }
     }
 }

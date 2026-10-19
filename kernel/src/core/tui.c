@@ -4,12 +4,13 @@
 #include <stdint.h>
 #include <lib/mem.h>
 #include <lib/string.h>
-#include <core/version.h>
 #include <core/arch/heap.h>
 #include <core/dev/keyboard.h>
 #include <core/dev/console.h>
+#include <core/dev/env.h>
 #include <core/kprintf.h>
 #include <core/tui.h>
+#include <core/mask.h>
 
 struct cell {
     char    ch;
@@ -38,15 +39,64 @@ static const char *const sgr_bg[8] = {
     "\x1b[44m", "\x1b[45m", "\x1b[46m", "\x1b[47m",
 };
 
-bool tui_begin(void) {
-    /* Prevent double-allocation leaks if already active */
-    if (front || back) {
-        tui_end();
+/* resolution getter */
+bool tui_fetch_resolution(const char *ns, const char *name, int *val_out) {
+    if (ns == NULL || name == NULL || val_out == NULL)
+        return false;
+
+    const struct env_ops *env = bus_env();
+    if (env == NULL)
+        return false;
+
+    /* inspect metadata */
+    struct env_stat st;
+    if (env->stat(ns, name, &st) != ENV_OK)
+        return false;
+
+    /* verify */
+    if (env_mask_type(st.mask) != ENV_TYPE_INT) {
+        // Optional: log warning that type contract was violated
+        return false;
     }
 
-    tui_w = TUI_W;
-    tui_h = TUI_H;
+    /* retrieve */
+    char buf[32];
+    size_t len = 0;
+    if (env->peek(ns, name, buf, sizeof(buf), &len) != ENV_OK)
+        return false;
 
+    /* 3. Parse safely */
+    uint64_t parsed = strtoull(buf, NULL, 10);
+    if (parsed == 0 || parsed > INT32_MAX)
+        return false;
+
+    *val_out = (int)parsed;
+    return true;
+}
+
+bool tui_begin(void) {
+    /* Prevent double-allocation leaks if already active */
+    if (front || back) { tui_end(); }
+
+    /* set default fallbacks if env is unavailable */
+    tui_w = 100;
+    tui_h = 25;
+
+    /* ask env for resolution variables */
+    int px_width = 0, px_height = 0;
+    /* Attempt to fetch dynamic pixel bounds from the environment broker */
+    if (tui_fetch_resolution("kernel.dev.console", "width", &px_width)) {
+        tui_w = px_width / 8;  /* Standard 8px font width cell */
+        tui_w = (tui_w * 85) / 100; /* scaler */
+    }
+    if (tui_fetch_resolution("kernel.dev.console", "height", &px_height)) {
+        tui_h = px_height / 16; /* Standard 16px font height cell */
+        tui_h = (tui_h * 85) / 100; /* scaler */
+    }
+    if (tui_w < 80)  tui_w = 80;
+    if (tui_h < 24)  tui_h = 24;
+
+    /* continue TUI init */
     size_t cells = (size_t)tui_w * (size_t)tui_h;
     front = kmalloc(cells * sizeof *front);
     back  = kmalloc(cells * sizeof *back);

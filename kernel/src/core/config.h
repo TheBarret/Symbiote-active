@@ -74,12 +74,6 @@
 #define SYM_TAG_WARNING "\x1b[1;33;7m[WARNING]\x1b[0m"
 #define SYM_TAG_ERROR   "\x1b[1;31;7m[ERROR]\x1b[0m"
 
-/* TUI settings
- * Ref: src/core/tui.c
- */
-#define TUI_W 120       // fallback
-#define TUI_H 40        // fallback (soon to be replaced by framebuffer resolution, row/col detection logic)
-
 /* fbcon settings
  * Theme: phosphor green on near-black (0xRRGGBB)
  * Ref: src/ext/fbcon/fbcon.c
