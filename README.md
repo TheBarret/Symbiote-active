@@ -43,6 +43,11 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 - `tui.c`: added `CP437` charsets, for primitive panels.
 - `ext/envtool/envtool.c`: added `CP437` support.
 
+- `ext/tokenizer/tokenizer.c`: added a token parser, first stage of the interpreter.  
+  data-types: `string, int, hex`
+  structures: `symbolics, identifiers = (functions), keywords = (use, let, while, if, else)`  
+
+
 <img width="1286" height="863" alt="envtool" src="https://github.com/user-attachments/assets/867f6399-6500-4c16-807b-9f23b271023e" />
 
 
