@@ -398,7 +398,7 @@ static int sub_stats(int argc, const char *const *argv) {
     kprintf("  reclaimed  : access=%llu time=%llu space=%llu explicit=%llu\n",
             (unsigned long long)in.n_reclaim_access, (unsigned long long)in.n_reclaim_time,
             (unsigned long long)in.n_reclaim_space,  (unsigned long long)in.n_reclaim_explicit);
-    kprintf("  purges     : %llu\n", (unsigned long long)in.n_sweeps);
+    kprintf("  sweeps     : %llu\n", (unsigned long long)in.n_sweeps);
     return CMD_OK;
 }
 
@@ -472,8 +472,7 @@ static int cmd_env(const struct cmd_args *a) {
     kprintf("env: unknown subcommand '%s' (try 'env help')\n", sub);
     return CMD_USAGE;
 }
-
-SYM_COMMAND(env, "<subcmd:str> [args:str...]", "Environment tool", cmd_env);
+SYM_COMMAND(env, "<subcmd:str> [args:str...]", "Environment editor (console)", cmd_env);
 
 /* extension greeter */
 static int env_ext_init(void) { return 0; }
