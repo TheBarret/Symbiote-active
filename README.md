@@ -5,7 +5,8 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 
 **0.1.1** - Major overhaul of the core
 
-<img width="1290" height="850" alt="image" src="https://github.com/user-attachments/assets/abc68e05-4359-46e1-9728-7f0f8246e40e" />  
+<img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/9e86190d-187f-4c27-af27-4faec2393479" />  
+
 
 <img width="1004" height="547" alt="Environment" src="https://github.com/user-attachments/assets/4343e103-5507-4315-a907-386609a3aab7" />  
 
