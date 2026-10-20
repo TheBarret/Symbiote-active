@@ -1,4 +1,3 @@
-#include "klog.h"
 #include <stddef.h>
 #include <lib/string.h>
 #include <core/dev/console.h>

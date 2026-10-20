@@ -9,6 +9,7 @@
 #include <core/dev/console.h>
 #include <core/dev/env.h>
 #include <core/kprintf.h>
+#include <core/klog.h>
 #include <core/tui.h>
 #include <core/mask.h>
 
@@ -58,7 +59,7 @@ bool tui_fetch_resolution(const char *ns, const char *name, int *val_out) {
 
     /* verify */
     if (env_mask_type(st.mask) != ENV_TYPE_INT) {
-        // Optional: log warning that type contract was violated
+        klog_warning("tui_fetch_resolution(): type contract was violated");
         return false;
     }
 
