@@ -513,6 +513,23 @@ static void env_sweep(void *arg) {
         klog_warning("Environment sweeper could not reschedule; lazy expiry only\n");
 }
 
+void env_destroy(void) {
+    struct env_device *e = g_env;
+    if (e == NULL) return;
+
+    if (e->timer != NULL && e->sweep_id >= 0)
+        e->timer->cancel(e->sweep_id);
+    e->sweep_id = -1;
+
+    for (size_t i = 0; i < e->capacity; i++) {
+        if (e->entries[i].live) env_reclaim(e, &e->entries[i], ENV_RECLAIM_EXPLICIT);
+    }
+
+    g_env = NULL;       /* ops now return ENV_NO_DEVICE */
+    kfree(e->entries);
+    kfree(e);
+}
+
 /* bus registration */
 
 static const struct env_ops env_bus_ops = {
@@ -578,21 +595,4 @@ void env_init(size_t max_entries, size_t max_bytes) {
     };
     bus_register(&dev);
     bus_test("env");
-}
-
-void env_destroy(void) {
-    struct env_device *e = g_env;
-    if (e == NULL) return;
-
-    if (e->timer != NULL && e->sweep_id >= 0)
-        e->timer->cancel(e->sweep_id);
-    e->sweep_id = -1;
-
-    for (size_t i = 0; i < e->capacity; i++) {
-        if (e->entries[i].live) env_reclaim(e, &e->entries[i], ENV_RECLAIM_EXPLICIT);
-    }
-
-    g_env = NULL;       /* ops now return ENV_NO_DEVICE */
-    kfree(e->entries);
-    kfree(e);
 }

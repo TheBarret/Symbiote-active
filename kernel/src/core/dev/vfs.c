@@ -22,18 +22,27 @@
  * on SMP it serializes the whole tree, which is the right granularity until a per-node lock is justified. */
 static volatile int vfs_lock;
 
-/* bus back-end */
-static const struct vfs_ops vfs_impl = {
-    .open    = vfs_open,
-    .close   = vfs_close,
-    .read    = vfs_read,
-    .write   = vfs_write,
-    .lseek   = vfs_lseek,
-    .mkdir   = vfs_mkdir,
-    .unlink  = vfs_unlink,
-    .stat    = vfs_stat,
-    .readdir = vfs_readdir,
+/* node model */
+
+struct vfs_node {
+    enum vfs_type type;
+    char name[VFS_NAME_MAX + 1];
+
+    uint8_t *data;
+    uint64_t size;
+
+    struct vfs_node *children;
+    struct vfs_node *next;
 };
+
+static struct vfs_node *root;
+
+struct vfs_file {
+    struct vfs_node *node;
+    uint64_t pos;
+    int flags;
+};
+
 
 static uint64_t vfs_acquire(void) {
     uint64_t flags = cpu_irq_save();
@@ -105,21 +114,6 @@ static bool path_normalize(const char *path, char *out) {
     return true;
 }
 
-/* node model */
-
-struct vfs_node {
-    enum vfs_type type;
-    char name[VFS_NAME_MAX + 1];
-
-    uint8_t *data;
-    uint64_t size;
-
-    struct vfs_node *children;
-    struct vfs_node *next;
-};
-
-static struct vfs_node *root;
-
 static struct vfs_node *path_lookup(const char *path, struct vfs_node **parent_out) {
     if (path[0] != '/')
         return NULL;
@@ -188,34 +182,6 @@ static void node_free_recursive(struct vfs_node *n) {
     kfree(n->data);
     kfree(n);
 }
-
-void vfs_init(void) {
-    uint64_t flags = vfs_acquire();
-    root = node_new(VFS_DIR, "", 0);
-    vfs_release(flags);
-
-    if (!root)
-        PANIC("vfs init: cannot allocate root");
-    klog("→ vfs_init() root mounted (flags=%lu)\n", flags);
-
-    // success, announce on bus
-    struct bus_device dev = {
-        .name         = "vfs",
-        .class        = BUS_CLASS_VFS,
-        .version      = 1,
-        .ops          = &vfs_impl,
-        .private_data = NULL,
-        .owner_id     = 4,
-    };
-    bus_register(&dev);
-    bus_test("vfs");
-}
-
-struct vfs_file {
-    struct vfs_node *node;
-    uint64_t pos;
-    int flags;
-};
 
 struct vfs_file *vfs_open(const char *path, int flags) {
     char norm[VFS_PATH_MAX];
@@ -501,4 +467,42 @@ bool vfs_readdir(const char *path, size_t *iter, char *name) {
 
     vfs_release(lock);
     return true;
+}
+
+
+/* bus back-end */
+static const struct vfs_ops vfs_impl = {
+    .open    = vfs_open,
+    .close   = vfs_close,
+    .read    = vfs_read,
+    .write   = vfs_write,
+    .lseek   = vfs_lseek,
+    .mkdir   = vfs_mkdir,
+    .unlink  = vfs_unlink,
+    .stat    = vfs_stat,
+    .readdir = vfs_readdir,
+};
+
+/* init */
+
+void vfs_init(void) {
+    uint64_t flags = vfs_acquire();
+    root = node_new(VFS_DIR, "", 0);
+    vfs_release(flags);
+
+    if (!root)
+        PANIC("vfs init: cannot allocate root");
+    klog("→ vfs_init() root mounted (flags=%lu)\n", flags);
+
+    // success, announce on bus
+    struct bus_device dev = {
+        .name         = "vfs",
+        .class        = BUS_CLASS_VFS,
+        .version      = 1,
+        .ops          = &vfs_impl,
+        .private_data = NULL,
+        .owner_id     = 4,
+    };
+    bus_register(&dev);
+    bus_test("vfs");
 }
