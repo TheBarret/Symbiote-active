@@ -522,7 +522,7 @@ int envtool_stats(void) {
                 (unsigned long long)in.n_reclaim_explicit,
                 (unsigned long long)in.n_sweeps);
         if (!in.timer_attached)
-            kprintf("     warning: timer not attached — TTL and sweeps are inert\n");
+            kprintf("     warning: timer not attached, TTL and sweeps are inert\n");
     }
 
     static const struct {
@@ -580,10 +580,8 @@ static int cmd_envtool_fn(const struct cmd_args *a) {
     return CMD_USAGE;
 }
 
-SYM_COMMAND(envtool, "<cmd:str> [arg:str...]",
-            "Environment module inspection and stress tester",
-            cmd_envtool_fn);
+SYM_COMMAND(envtool, "<cmd:str> [arg:str...]", "Environment helpers (args: inspect, stats, fill)", cmd_envtool_fn);
 
 /* extension greeter */
 static int envtool_ext_init(void) { return 0; }
-SYM_EXTENSION(envtool, envtool_ext_init, EXT_PRIO_APPLET);
+SYM_EXTENSION(envt_toolkit, envtool_ext_init, EXT_PRIO_APPLET);
