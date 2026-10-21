@@ -10,7 +10,7 @@ override OUTPUT := symbiote
 # the directory src/ext/<name>/. Override on the command line, e.g.:
 #   make EXTENSIONS="hello"        (headless image, serial console only)
 
-EXTENSIONS ?= fbcon system memory env envtool
+EXTENSIONS ?= fbcon system memory env envtool proxy
 
 # default is x86_64.
 ARCH := x86_64
