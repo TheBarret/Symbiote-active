@@ -52,7 +52,7 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
   data-types: `string, int, hex`
   structures: `symbolics, identifiers = (functions), keywords = (use, let, while, if, else)`  
 
-- `ext/proxy/proxy.h`, `ext/proxy/proxy.h`: added proxy module, inspired by Microsoft's [MarshalByRefobject](https://learn.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject?view=net-10.0).  
+- `ext/proxy/proxy.h`, `ext/proxy/proxy.c`: added proxy module, inspired by Microsoft's [MarshalByRefobject](https://learn.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject?view=net-10.0).  
 
   Example of writing `Hello, World!` to console device using safe call mechanism:  
   ```c
