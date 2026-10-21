@@ -43,55 +43,23 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 - `tui.c`: added `CP437` charsets, for primitive panels.
 - `ext/envtool/envtool.c`: added `CP437` support.
 
+<img width="1286" height="863" alt="envtool" src="https://github.com/user-attachments/assets/867f6399-6500-4c16-807b-9f23b271023e" />  
+
 - `ext/tokenizer/tokenizer.c`: added a token parser, first stage of the interpreter.  
   data-types: `string, int, hex`
   structures: `symbolics, identifiers = (functions), keywords = (use, let, while, if, else)`  
 
+- `ext/proxy/proxy.h`, `ext/proxy/proxy.h`: added proxy module, inspired by Microsoft's [MarshalByRefobject](https://learn.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject?view=net-10.0).  
 
-<img width="1286" height="863" alt="envtool" src="https://github.com/user-attachments/assets/867f6399-6500-4c16-807b-9f23b271023e" />
-
-
-
-
-# Active & Planned Features
-
-**Environment Broker ("ring collector")**  
-
-A bounded, fixed-capacity table of `(namespace, name) -> value` entries.  
-Intended as the kernel's read-mostly information surface: system, session, shell state, flags, paths.   
-Ring collector is classified as a virtual device, it can be discovered by extension or scripted objects, through `bus_env()`.  
-
-Mechanical control points (owned by env):  
-- access budget : 0 = unlimited; N > 0 = entry is reclaimed after N get()s.  
-                  peek() and stat() never consume budget.   
-
-- Ttl ticks     : `0 = no expiry`; otherwise entry expires ttl ticks after set.  
-
-- Importance    : `0 = persistent` Under space pressure the `5-10` importance objects are evicted first, then the least recently accessed.  
-
-- Mask          : `mask.h` defined classification field, searchable through `list_by_mask()` / `count_by_mask()`.  
-                  Holds universal and arbitrary metrics about what it is and who owns it, plus device specific event metrics.  
-
-**Interpreter**  
-
-A custom syntax, very basic, inspired from (MS) QBasic, that lets you address devices within the kernel.  
-
-Pseudo `Hello, World!`:  
-```lua
-    USE: console;
-
-    LET $message, "Hello, World\n";
-    LET &console_write, $message;
-```
-
-Pseudo `Timer`-event:  
-```lua
-    USE: console, timer;
-
-    ON TIMER_TICK(10000) {             // milliseconds
-      LET $message, "Hello, World\n";
-      LET &console_write, $message;
-    }
-```
-  
+  Example of writing `Hello, World!` to console device using safe call mechanism:  
+  ```c
+  const struct proxy_ops *p = bus_proxy();
+  uint32_t h;
+  /* lease  */
+  if (p->bind("console", &h) == PROXY_OK) {
+      const char msg[] = "Hello, World!\0";
+      p->call(h, PROXY_CONSOLE_WRITE, (const uint8_t *)msg, sizeof msg, NULL, 0, NULL);
+      p->unbind(h);
+  }
+  ```
 ---
