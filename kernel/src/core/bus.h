@@ -38,7 +38,11 @@
  * lock-free reads and are safe from any context, including ISRs.
  * bus_register() after shell_run() is a bug; there is no lock. */
 
-/* dont get confused here, config.h is the authoritative ID table. */
+/* don't get confused here: */
+/* owner_id = config.h = authoritative owner ID table  */
+/* not the same thing as: */
+/* class = bus.h = bus classification ID table */
+/* expected to be hardcoded vectors */
 enum bus_class {
     BUS_CLASS_NONE     = 0,   /* default */
     BUS_CLASS_CONSOLE  = 1,   /* serial.c, console.c */
