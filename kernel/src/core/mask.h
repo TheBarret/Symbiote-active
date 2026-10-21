@@ -24,20 +24,11 @@
  *   4. The TYPE field is a hint for UI and tooling, not a binding contract.
  *      The value string remains a string; TYPE just describes its intent.
  *   5. FLAGS are universal, core-defined behaviors.
- *
- *  Device id list:
- * - 0 : nobody
- * - 1 : console
- * - 2 : timer
- * - 3 : environment
- * - 4 : filesystem
- * - 5 : bus
  */
 
 /* OWNER (bits 31..24) */
 #define ENV_MASK_OWNER_SHIFT   24
 #define ENV_MASK_OWNER_MASK    (0xFFu << ENV_MASK_OWNER_SHIFT)
-#define ENV_OWNER_CORE         0u   /* Core kernel subsystems */
 
 /* TYPE (bits 23..20) */
 #define ENV_MASK_TYPE_SHIFT    20
@@ -57,10 +48,10 @@
 #define ENV_MASK_FLAG_SHIFT    16
 #define ENV_MASK_FLAG_MASK     (0xFu << ENV_MASK_FLAG_SHIFT)
 
-#define ENV_FLAG_READONLY      (1u << 16)  /* set() from others will be rejected */
-#define ENV_FLAG_SECRET        (1u << 17)  /* envtool hides from default listings */
-#define ENV_FLAG_CACHEABLE     (1u << 18)  /* safe to recompute, just cached */
-#define ENV_FLAG_PINNED        (1u << 19)  /* immune to space-pressure eviction */
+#define ENV_FLAG_READONLY      (1u << 16)  /* policy: restricted, no overwrites */
+#define ENV_FLAG_SECRET        (1u << 17)  /* policy: hide from default listings */
+#define ENV_FLAG_CACHEABLE     (1u << 18)  /* policy: safe to recompute */
+#define ENV_FLAG_PINNED        (1u << 19)  /* policy: immune to space-pressure eviction */
 
 /* PRIVATE (bits 15..0) */
 #define ENV_MASK_PRIVATE_SHIFT 0

@@ -87,6 +87,20 @@
  */
 #define BUS_MAX_DEVICES 32
 
+/* Bus ID table (hardcoded)
+ * Ref: src/core/bus.h
+ * Ref: src/core/mask.h
+ */
+#define BUS_KERN_ID             0u // default or fallback
+#define BUS_CONSOLE_ID          1u
+#define BUS_TIMER_ID            2u
+#define BUS_ENV_ID              3u
+#define BUS_VFS_ID              4u
+#define BUS_BUS_ID              5u
+#define BUS_INTPR               6u
+#define BUS_PROXY               7u
+
+
 /* Command dispatcher settings
  * Ref: src/core/cmd.c
  */
@@ -105,7 +119,6 @@
 #define ENV_SWEEP_PERIOD_MS     1000
 #define ENV_SWEEP_BATCH         64
 #define ENV_MASK_DEFAULT        0x0000
-
 
 /* fail at build */
 _Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "PMM_PAGE_SIZE must be a power of two");

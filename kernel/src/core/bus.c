@@ -29,7 +29,7 @@ void bus_init(void) {
         bus_table[i].version = 0;
         bus_table[i].ops = NULL;
         bus_table[i].private_data = NULL;
-        bus_table[i].owner_id = 5;
+        bus_table[i].owner_id = BUS_BUS_ID;
     }
     bus_used = 0;
     klog_bus("Initialized (max=%u)\n", BUS_MAX_DEVICES);
@@ -161,4 +161,5 @@ void bus_publish_manifest(void) {
         /* validate */
         if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %u", ret_value); }
     }
+    klog_env("→ bus manifest published: kernel.dev.*\n");
 }

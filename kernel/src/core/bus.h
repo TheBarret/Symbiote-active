@@ -38,31 +38,34 @@
  * lock-free reads and are safe from any context, including ISRs.
  * bus_register() after shell_run() is a bug; there is no lock. */
 
+/* dont get confused here, config.h is the authoritative ID table. */
 enum bus_class {
-    BUS_CLASS_NONE     = 0,   /* null */
+    BUS_CLASS_NONE     = 0,   /* default */
     BUS_CLASS_CONSOLE  = 1,   /* serial.c, console.c */
     BUS_CLASS_TIMER    = 2,   /* interrupts, timer.c */
-    BUS_CLASS_VFS      = 3,   /* virtual filesystem, vfs.c */
-    BUS_CLASS_LOG      = 4,   /* kernel logger, console.c */
-    BUS_CLASS_ENV      = 5,   /* environment, env.c */
+    BUS_CLASS_ENV      = 3,   /* environment storage, env.c */
+    BUS_CLASS_VFS      = 4,   /* virtual files ystems, vfs.c */
+    BUS_CLASS_BUS      = 5,   /* bus interior, bus.c */
+    BUS_CLASS_INPR     = 6,   /* interpreter module */
+    BUS_CLASS_PROXY    = 7,   /* proxy module */
 };
 
 struct bus_device {
-    const char *name;         /* unique, e.g. "console", "timer", "vfs" */
-    enum bus_class class;
-    uint16_t version;         /* module revision, exposed to scripts */
-    const void *ops;          /* struct <class>_ops *, cast on lookup; must not be NULL */
-    void *private_data;    /* backend state, opaque to the bus */
-    uint16_t owner_id;      /* unique identifier  */
+    const char      *name;         /* unique, e.g. "console", "timer", "vfs" */
+    enum bus_class  class;
+    uint16_t        version;       /* module revision, exposed to scripts */
+    const void      *ops;          /* struct <class>_ops *, cast on lookup; must not be NULL */
+    void            *private_data; /* backend state, opaque to the bus */
+    uint16_t        owner_id;      /* unique identifier  */
 };
 
 /* Zero the table. First thing after serial_init() in kmain,
  * before gdt_init(). Must run before any bus_register(). */
 void bus_init(void);
 
-/* Register a device. The struct is copied into the table; the caller
- * must keep dev->name alive for the entry's lifetime (string literals
- * are fine), and must keep ops and private_data alive indefinitely.
+/* Register a device. The struct is copied into the table;
+ * the caller must keep dev->name alive for the entry's lifetime (string literals are fine),
+ * and must keep ops and private_data alive indefinitely.
  *
  * Returns 0, or -1 if:
  *   - the table is full (BUS_MAX_DEVICES)
