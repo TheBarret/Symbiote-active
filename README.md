@@ -3,6 +3,8 @@
 
 Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
 
+**Current goal is to implement layers that accommodate a custom interpreter**  
+
 **0.1.1** - Major overhaul of the core
 
 <img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/9e86190d-187f-4c27-af27-4faec2393479" />  
