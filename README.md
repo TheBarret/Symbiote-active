@@ -100,7 +100,8 @@ kernel/
 - `tui.c`: added `CP437` charsets, for primitive panels.
 - `ext/envtool/envtool.c`: added `CP437` support.
 
-<img width="1286" height="863" alt="envtool" src="https://github.com/user-attachments/assets/867f6399-6500-4c16-807b-9f23b271023e" />  
+  <img width="836" height="429" alt="envtool" src="https://github.com/user-attachments/assets/c91cea1f-afd3-4cf0-9895-2e22ff042a4e" />
+
 
 - `ext/tokenizer/tokenizer.c`: added a token parser, first stage of the interpreter.  
   data-types: `string, int, hex`
