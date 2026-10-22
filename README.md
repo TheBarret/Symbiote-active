@@ -47,6 +47,7 @@ kernel/
       │   ├── klog.h                  # Kernel logging extension (kern, info, warn, error)
       │   ├── ext.h                   # Extension module dispatcher
       │   ├── cmd.h                   # Command-line dispatcher & interpreter
+      │   ├── tui.h                   # TUI (Text-based User Interface) engine
       │   └── shell.h                 # Interactive Shell Manager
       ├── lib/                        # Interior library
       │   ├── mem.h                   # Direct memory operation library
