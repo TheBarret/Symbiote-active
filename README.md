@@ -66,6 +66,18 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
       p->unbind(h);
   }
   ```
+
+- `/ext/assets/fonts.h`: added converted PSF font glyphs (Debian default console fonts).
+
+- `/etc/fbcon/fbcon.c`: supports custom font glyps:
+  * Western Latin (`default`, `lat`, `iso`)
+  * IBM PC / DOS Code Page (`cp...`, `alt`)
+  * Cyrillic & Eastern European (`Cyr`, `ruscii`, `koi8`, `Mik`)
+  * Greek (`gr`, `greek`, `gr737`)
+  * Multi-Script / Universal (`LatArCyrHeb`)
+  * Regional & Asian Scripts (`Goha`, `arm`, `tis`, `tcvn`, `viscii`)
+  * Accessibility & Special Purpose, Braille (`brl`)
+
 ---
 
 # Third Party licenses
