@@ -76,7 +76,33 @@ This software incorporates components from third-party projects, detailed below:
     -------------------------------------------------------------------------------
     1. Debian - PSF Console Fonts (https://packages.debian.org/sid/console-data)
     -------------------------------------------------------------------------------
-    Licensed under GNU GPL v2. PSF Fonts from console-data package of Debian
+    This is the Debian-Linux prepackaged version of the data for the Linux
+    Console Data.
+    
+    This package was put together by Yann Dirson <dirson@debian.org>, from
+    sources you can get from:
+     ftp://lct.sourceforge.net/pub/lct/
+    
+    Packaging is copyright 1999-2001 Yann Dirson	<dirson@debian.org>
+    	     copyright 2001 Alcove		http://www.alcove.fr/
+    
+    
+    The Linux Console Tools data are derived from the data files provided
+    by the latest version of the kbd package, and are covered by the GPL
+    version 2.0 (see /usr/share/common-licenses/GPL-2 for details).
+    
+    The Latin-1 *.psf fonts were developed by H. Peter Anvin, and the
+    Latin-2 ones by Pavel Zaboj.
+    
+    Goha and GohaClassic:
+      Donated by Yitna Firdyiwek <ybf2u@virgina.edu> of GohaTibeb Associates
+      and may be restributed without restriction under the GNU GPL 2.0.
+    
+    All other Ethiopic fonts:
+      The collection in this directory donated for Linux distributions is
+      otherwise maintained by Daniel Yacob <Daniel_Yacob_at_UNECA@un.org> and
+      <yacob@padis.gn.apc.org>. The are redistributable under the GNU GPL version
+      2.0.
     
     -------------------------------------------------------------------------------
     2. Limine Bootloader (https://github.com/limine-bootloader/limine)
