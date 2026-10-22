@@ -10,8 +10,55 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 <img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/9e86190d-187f-4c27-af27-4faec2393479" />  
 
 
-<img width="1021" height="555" alt="block-diagram" src="https://github.com/user-attachments/assets/f834b8ae-41cf-4c23-9ea0-12e95d928283" />
+## Project Files & Structure
 
+```
+kernel/
+  └── src/
+      ├── core/
+      │   ├── arch/                   # Low-level architecture & hardware abstractions
+      │   │   ├── boot.h              # Limine bootloader API vectors & boot validation
+      │   │   ├── cpu.h               # CPU tables, CPUID, & TSC-clock management
+      │   │   ├── serial.h            # COM1 serial driver (115200 baud)
+      │   │   ├── gdt.h               # Global Descriptor Table (Ring 0 setup)
+      │   │   ├── idt.h               # Interrupt Descriptor Table (256 vectors)
+      │   │   ├── pic.h               # 8259 PIC driver & virtual wire platform
+      │   │   ├── isr.h               # Interrupt Service Routines & isr_stubs.S wrapper
+      │   │   ├── pmm.h               # Physical Memory Manager (frame allocation)
+      │   │   ├── vmm.h               # Virtual Memory Manager (PMM-backed paging)
+      │   │   └── heap.h              # Kernel heap (block headers & HHDM coalescing)
+      │   │
+      │   ├── dev/                    # Subsystem device drivers & abstractions
+      │   │   ├── console.h           # Console device & PS/2 interface
+      │   │   ├── keyboard.h          # Keyboard poller, reader
+      │   │   ├── vfs.h               # Virtual File System (ramfs implementation)
+      │   │   ├── timer.h             # Programmable interval clock controller
+      │   │   └── env.h               # Environment variable key-value store device
+      │   │
+      │   ├── bus.h                   # Bus registry & late device discovery manager
+      │   ├── version.h               # Master version definition
+      │   ├── config.h                # Master config definition
+      │   ├── mask.h                  # Environment mask contract decoder and encoder
+      │   ├── kprintf.h               # Formatted text output multiplexer
+      │   ├── klog.h                  # Kernel logging extension (kern, info, warn, error)
+      │   ├── ext.h                   # Extension module dispatcher
+      │   ├── cmd.h                   # Command-line dispatcher & interpreter
+      │   └── shell.h                 # Interactive Shell Manager
+      ├── lib/                        # Interior library
+      │   ├── mem.h                   # Direct memory operation library
+      │   └── string.h                # String manipulation library
+      └── ext/                        # Kernel extensions, drivers, and visual assets
+          ├── fbcon/                  # Framebuffer Console extension (Flanterm backend)
+          ├── proxy/                  # Proxy extension module
+          ├── cpu/                    # Query cpuid information
+          ├── system/                 # built-in system commands
+          ├── memory/                 # Heap, memory inspect and testers
+          ├── env/                    # Environment command-line tool
+          ├── envtool/                # Environment inspect and testers
+          ├── tokenizer/              # Tokenizer library
+          └── assets/                 # Static resources & embedded binary payloads
+
+```
 
 
 - All interior `core/*` modules have been refactored and aligned, and have added safety logic.
