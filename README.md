@@ -16,7 +16,7 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 kernel/
   └── src/
       ├── core/
-      │   ├── arch/                   # Low-level architecture & hardware abstractions
+      │   ├── arch/                   # Low-level architecture & hardware abstractions (absolute ground-zero)
       │   │   ├── boot.h              # Limine bootloader API vectors & boot validation
       │   │   ├── cpu.h               # CPU tables, CPUID, & TSC-clock management
       │   │   ├── serial.h            # COM1 serial driver (115200 baud)
@@ -33,7 +33,7 @@ kernel/
       │   │   ├── keyboard.h          # Keyboard poller, reader
       │   │   ├── vfs.h               # Virtual File System (ramfs implementation)
       │   │   ├── timer.h             # Programmable interval clock controller
-      │   │   └── env.h               # Environment variable key-value store device
+      │   │   └── env.h               # Environment variable key-value storage device (self-regulating variable store)
       │   │
       │   ├── bus.h                   # Bus registry & late device discovery manager
       │   ├── version.h               # Master version definition
@@ -49,13 +49,13 @@ kernel/
       │   └── string.h                # String manipulation library
       └── ext/                        # Kernel extensions, drivers, and visual assets
           ├── fbcon/                  # Framebuffer Console extension (Flanterm backend)
-          ├── proxy/                  # Proxy extension module
+          ├── proxy/                  # Bus extension module (provides funneled access to bus objects with guardrails, for featured interpreter)
           ├── cpu/                    # Query cpuid information
           ├── system/                 # built-in system commands
           ├── memory/                 # Heap, memory inspect and testers
           ├── env/                    # Environment command-line tool
           ├── envtool/                # Environment inspect and testers
-          ├── tokenizer/              # Tokenizer library
+          ├── tokenizer/              # Tokenizer library (provides tokenization for featured interpreter)
           └── assets/                 # Static resources & embedded binary payloads
 
 ```
