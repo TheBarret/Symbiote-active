@@ -78,7 +78,9 @@ static struct chunk *chunk_create(size_t payload_bytes) {
     c->next = NULL;
 
     struct block_header *first = (struct block_header *)(base + CHUNK_HDR_SIZE);
-    size_t first_size = (c->size - CHUNK_HDR_SIZE) & ~(size_t)(HEAP_ALIGN - 1);
+    // not good, wastes 16 bytes
+    //size_t first_size = (c->size - CHUNK_HDR_SIZE) & ~(size_t)(HEAP_ALIGN - 1);
+    size_t first_size = (c->size - CHUNK_HDR_SIZE - HDR_SIZE) & ~(size_t)(HEAP_ALIGN - 1);
 
     first->size = first_size;
     first->free = true;
@@ -194,6 +196,8 @@ void *kzalloc(size_t size) {
     return p;
 }
 
+/* this approach does not validate before mutating
+
 void kfree(void *ptr) {
     if (ptr == NULL)
         return;
@@ -233,6 +237,57 @@ void kfree(void *ptr) {
 
     PANIC("heap: kfree of a pointer not in any chunk");
 }
+*/
+void kfree(void *ptr) {
+    if (ptr == NULL)
+        return;
+
+    struct block_header *b = (struct block_header *)((uint8_t *)ptr - HDR_SIZE);
+
+    /* 1. Locate: find the owning chunk and the block's predecessor,
+     *    and confirm b is a real block boundary. No writes yet. */
+    struct block_header *prev = NULL;
+    bool found = false;
+
+    for (struct chunk *c = chunks_head; c && !found; c = c->next) {
+        uint8_t *start = (uint8_t *)c + CHUNK_HDR_SIZE;
+        uint8_t *limit = (uint8_t *)c + c->size - HDR_SIZE;   /* sentinel */
+        if ((uint8_t *)b < start || (uint8_t *)b >= limit)
+            continue;
+
+        struct block_header *w = (struct block_header *)start;
+        prev = NULL;
+        while ((uint8_t *)w < (uint8_t *)b) {
+            if (w->size == 0)
+                PANIC("heap: kfree walk hit sentinel");
+            prev = w;
+            w = (struct block_header *)((uint8_t *)w + w->size);
+        }
+        if (w != b)
+            PANIC("heap: kfree of a pointer that is not a block");
+        found = true;
+    }
+    if (!found)
+        PANIC("heap: kfree of a pointer not in any chunk");
+
+    /* 2. Validate the header. */
+    header_check(b, "kfree");
+    if (b->free) {
+        klog_error("heap: double free of %p\n", ptr);
+        PANIC("heap: double free");
+    }
+
+    /* 3. Mutate. */
+#ifdef SYM_MEMDEBUG
+    memset(ptr, POISON_FREE, BLOCK_PAYLOAD_SIZE(b));
+    b->owner = NULL;
+#endif
+    b->free = true;
+    block_coalesce_next(b);
+    if (prev && prev->free)
+        block_coalesce_next(prev);
+}
+
 
 void *krealloc(void *ptr, size_t new_size) {
     if (ptr == NULL)
