@@ -131,6 +131,9 @@ kernel/
   * Regional & Asian Scripts (`Goha`, `arm`, `tis`, `tcvn`, `viscii`)
   * Accessibility & Special Purpose, Braille (`brl`)
 
+- `/core/arch/heap.c`: fixed incorrect sentinel field calculation inside `chunk_create`, updated leak (coalescing) condition test.
+- `ext/memory/memory.c`: fixed `fmt_size` incorrect decimal notation.
+  
 ---
 
 # Third Party licenses
