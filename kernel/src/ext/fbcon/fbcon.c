@@ -12,17 +12,19 @@
 #include <flanterm.h>
 #include <flanterm_backends/fb.h>
 
+/* debian PSF-console package */
+/* ref: https://packages.debian.org/sid/console-data */
+#include <ext/assets/fonts.h>
 
 /* Framebuffer console extension.
- * flanterm draws text (with a built-in font, scrolling and ANSI colours) onto
- * the framebuffer Limine gave us. Without this extension the image is
- * headless and only the serial console exists. */
+ * flanterm draws text (with a built-in font, scrolling and ANSI colours)
+ * onto the framebuffer Limine gave us. Without this extension the image is headless,
+ * and only the serial console exists. */
 
 static struct flanterm_context *term;
 
-/* flanterm behaves like a real terminal: '\n' only moves DOWN a line. Our
- * kprintf uses plain '\n' for "newline", so convert it to CR+LF here, just as
- * the serial console does. */
+/* flanterm behaves like a real terminal: '\n' only moves DOWN a line.
+ * Our kprintf uses plain '\n' for "newline", so convert it to CR+LF here, just as the serial console does. */
 static void fbcon_write(const char *buf, size_t len) {
     size_t start = 0;
     for (size_t i = 0; i < len; i++) {
@@ -42,6 +44,7 @@ static uint32_t theme_bg = SYM_FBCON_BG;
 static uint32_t theme_fg = SYM_FBCON_FG;
 
 static int fbcon_init(void) {
+
     struct limine_framebuffer *fb = boot_framebuffer();
     if (fb == NULL)
         return 1;           /* no framebuffer: stay headless */
@@ -57,10 +60,21 @@ static int fbcon_init(void) {
         NULL,                               /* no canvas */
         NULL, NULL,                         /* default ANSI colours */
         &theme_bg, &theme_fg,               /* our default background / foreground */
-        NULL, NULL,                         /* default bright variants */
-        NULL, 0, 0, 1,                      /* built-in font */
-        0, 0,                               /* auto-scale font to resolution */
-        0,                                  /* margin */
+
+        /* Fonts */
+        /* NULL, NULL,                          default bright variants */
+        /* NULL, 0, 0, 1,                       built-in font */
+        /* 0, 0,                                auto-scale font to resolution */
+        /* 0,                                   margin */
+
+        NULL, NULL,
+        (void *)cp850_8x16_font,             /* Pointer to font array */
+        CP850_8X16_WIDTH,                    /* Width macro auto-defined by script (8) */
+        CP850_8X16_HEIGHT,                   /* Height macro auto-defined by script (16) */
+        1,                                    /* Font spacing */
+        0, 0,
+        0,
+
         FLANTERM_FB_ROTATE_0,
         true);                              /* autoflush */
     if (term == NULL)
@@ -98,6 +112,8 @@ static int fbcon_init(void) {
         if (ret_value != ENV_OK) { klog_warning("fbcon_init(env->set): exit code = %u", ret_value); }
     }
 
+    // success
+    klog_env("→ console manifest published: kernel.dev.*\n");
     return 0;
 }
 
