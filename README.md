@@ -12,6 +12,9 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 
 ## Project Files & Structure
 
+<img width="1024" height="559" alt="boot sequence" src="https://github.com/user-attachments/assets/3a36156b-f0a6-4821-8281-53be2ca8d4ff" />
+
+
 ```
 kernel/
   └── src/
