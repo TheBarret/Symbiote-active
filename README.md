@@ -10,7 +10,8 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 <img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/9e86190d-187f-4c27-af27-4faec2393479" />  
 
 
-<img width="1024" height="558" alt="image" src="https://github.com/user-attachments/assets/101c2799-9d71-4560-8abe-40289e9da28b" />  
+<img width="1021" height="555" alt="block-diagram" src="https://github.com/user-attachments/assets/f834b8ae-41cf-4c23-9ea0-12e95d928283" />
+
 
 
 - All interior `core/*` modules have been refactored and aligned, and have added safety logic.
