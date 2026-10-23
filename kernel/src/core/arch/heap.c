@@ -196,48 +196,6 @@ void *kzalloc(size_t size) {
     return p;
 }
 
-/* this approach does not validate before mutating
-
-void kfree(void *ptr) {
-    if (ptr == NULL)
-        return;
-
-    struct block_header *b = (struct block_header *)((uint8_t *)ptr - HDR_SIZE);
-
-    header_check(b, "kfree");
-    if (b->free) {
-        klog_error("heap: double free of %p\n", ptr);
-        PANIC("heap: double free");
-    }
-
-#ifdef SYM_MEMDEBUG
-    memset(ptr, POISON_FREE, BLOCK_PAYLOAD_SIZE(b));
-    b->owner = NULL;
-#endif
-
-    b->free = true;
-    b = block_coalesce_next(b);
-
-    for (struct chunk *c = chunks_head; c; c = c->next) {
-        uint8_t *chunk_start = (uint8_t *)c + CHUNK_HDR_SIZE;
-        uint8_t *chunk_limit = (uint8_t *)c + c->size;
-        if ((uint8_t *)b < chunk_start || (uint8_t *)b >= chunk_limit)
-            continue;
-
-        struct block_header *prev = NULL;
-        struct block_header *w = (struct block_header *)chunk_start;
-        while ((uint8_t *)w < (uint8_t *)b) {
-            prev = w;
-            w = (struct block_header *)((uint8_t *)w + w->size);
-        }
-        if (prev && prev->free)
-            block_coalesce_next(prev);
-        return;
-    }
-
-    PANIC("heap: kfree of a pointer not in any chunk");
-}
-*/
 void kfree(void *ptr) {
     if (ptr == NULL)
         return;

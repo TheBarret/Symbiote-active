@@ -26,6 +26,7 @@ uint64_t boot_hhdm_offset(void);
 bool boot_memory_ok(void);
 
 /* Physical and virtual bases of the loaded kernel image, or NULL if absent.
+ * Reserved for future VA translation; not called today.
  * Use these (not MEMMAP_EXECUTABLE_AND_MODULES) when translating kernel VAs. */
 struct limine_executable_address_response *boot_executable_address(void);
 

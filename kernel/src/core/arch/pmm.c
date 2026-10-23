@@ -9,8 +9,9 @@
 #include <core/panic.h>
 
 
-/* Limine sorts the map by base and guarantees:
- * USABLE, BOOTLOADER_RECLAIMABLE entries are page-aligned and non-overlapping, asserted in init. */
+/* Limine sorts the map by base and guarantees USABLE and
+ * BOOTLOADER_RECLAIMABLE entries are page-aligned and non-overlapping.
+ * BOOTLOADER_RECLAIMABLE is currently retained (not reclaimed). */
 
 static uint8_t *bitmap;             /* 1 = used, 0 = free */
 static size_t   bitmap_bytes;
@@ -62,7 +63,9 @@ static void reserve_bitmap_frames(void) {
     size_t start = (size_t)(bitmap_phys / PMM_PAGE_SIZE);
     size_t count = (bitmap_bytes + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE;
     frames_mark_used(start, count);
-    free_frames -= count;
+    /* frames_mark_used is bounds-checked and may no-op; only debit when it can mark. */
+    if (start + count <= total_frames)
+        free_frames -= count;
 }
 
 static void reserve_special_regions(struct limine_memmap_response *map) {
@@ -155,7 +158,8 @@ void pmm_init(void) {
     reserve_bitmap_frames();
     reserve_special_regions(map);
 
-    /* Frame 0 stays reserved so pmm_alloc() returning 0 is unambiguously "out". */
+    /* Frame 0 stays reserved so pmm_alloc() returning 0 is unambiguously "out".
+     * vmm_translate's 0 sentinel (unmapped vs phys 0) also depends on this. */
     if (!frame_is_used(0)) {
         frame_mark_used(0);
         free_frames--;

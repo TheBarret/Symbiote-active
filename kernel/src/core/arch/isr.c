@@ -95,6 +95,7 @@ struct irq_info irq_get_info(int irq) {
 void interrupt_dispatch(struct isr_frame *f) {
     uint64_t v = f->vector;
 
+    /* Coupled to pic.c lapic_virtual_wire(): SVR spurious vector is written as 0xFF. */
     if (f->vector == 0xFF)      /* LAPIC spurious: ignore, no EOI */
         return;
 

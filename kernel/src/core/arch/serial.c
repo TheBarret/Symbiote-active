@@ -5,10 +5,6 @@
 #include <core/arch/serial.h>
 #include <core/dev/console.h>
 
-
-// Moved to ref: core/version.h
-//#define COM1 0x3F8
-
 static void serial_putc(char c) {
     /* Wait (bounded) until the transmit holding register is empty.
      * A missing port reads back 0xFF, which also looks "ready", so this cannot hang. */

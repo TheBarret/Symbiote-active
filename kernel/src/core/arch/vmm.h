@@ -8,13 +8,11 @@
 /* Virtual memory manager.
  *
  * Takes ownership of the address space by cloning Limine's page tables into PMM-backed frames,
- * then switching CR3. After init, bootloader page tables are unused and may be reclaimed with the rest of BOOTLOADER_RECLAIMABLE.
+ * then switching CR3. After init, bootloader page tables are unused but retained
+ * (BOOTLOADER_RECLAIMABLE is not currently reclaimed).
  * Map/unmap operate on 4 KiB pages.
  * Huge pages inherited from Limine (HHDM) are left intact; do not try to map/unmap inside those ranges.
  * No locking, same single-threaded boot assumption as the PMM. */
-
-// Moved to ref: core/version.h
-//#define VMM_PAGE_SIZE 4096
 
 /* PTE flag bits passed to vmm_map / vmm_protect. Present is always implied. */
 #define VMM_WRITE   (1ull << 0)
@@ -25,6 +23,10 @@
 /* Higher-half window reserved for kernel dynamic mappings (heap, etc.).
  * Kept clear of HHDM and the kernel image at 0xffffffff80000000. */
 #define VMM_DYNAMIC_BASE 0xfffffe0000000000ull
+
+/* Named offsets inside VMM_DYNAMIC_BASE so LAPIC and vmtest cannot collide. */
+#define VMM_DYNAMIC_VMTEST (VMM_DYNAMIC_BASE + 0x000000ull)
+#define VMM_DYNAMIC_LAPIC  (VMM_DYNAMIC_BASE + 0x200000ull)
 
 // device memory must not be cached
 #define VMM_NOCACHE (1ull << 4)

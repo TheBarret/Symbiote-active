@@ -11,7 +11,10 @@
  * family/model table below. */
 
 /* Nominal core crystal clock for common Intel families, in Hz.
- * Values from the Intel SDM's table for leaf 0x15 when ECX is 0. */
+ * Values from the Intel SDM's table for leaf 0x15 when ECX is 0.
+ * Returns 0 for every AMD CPU today; klog_init falls back to 2.5 GHz.
+ * If AMD support matters later, add family 0x17/0x19 (and fix the
+ * family/model decode above for base_family == 0xF). */
 static uint64_t crystal_hz_for(uint32_t family, uint32_t model) {
     /* TODO: define more options. */
     switch (family) {
@@ -50,6 +53,8 @@ uint64_t cpu_tsc_hz(void) {
         /* Fall back to the family/model table. */
         uint32_t f_eax, f_ebx, f_ecx, f_edx;
         cpuid(1, 0, &f_eax, &f_ebx, &f_ecx, &f_edx);
+        /* Only correct for base_family != 0xF. If adding family 0xF/0x17/0x19
+         * to crystal_hz_for, replace with display-family/display-model per Intel SDM. */
         uint32_t family = ((f_eax >> 8) & 0xF) + ((f_eax >> 20) & 0xFF);
         uint32_t model  = ((f_eax >> 4) & 0xF) | (((f_eax >> 16) & 0xF) << 4);
         crystal = crystal_hz_for(family, model);

@@ -33,9 +33,6 @@
 
  */
 
-// Moved to ref: core/version.h
-//#define PMM_PAGE_SIZE 4096
-
 /* Initialize from the bootloader's memory map and HHDM.
  * Panics if the map or HHDM is missing, or if there is no usable region big enough to hold the bitmap. */
 void pmm_init(void);

@@ -17,7 +17,7 @@
 #define ICW1_ICW4      0x01
 #define ICW4_8086      0x01
 
-#define LAPIC_VA     (VMM_DYNAMIC_BASE + 0x200000ull)   /* clear of vmtest's page */
+#define LAPIC_VA     VMM_DYNAMIC_LAPIC   /* see vmm.h: structurally clear of VMM_DYNAMIC_VMTEST */
 #define LAPIC_SVR    (0x0F0 / 4)
 #define LAPIC_LINT0  (0x350 / 4)
 
