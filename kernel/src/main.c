@@ -5,7 +5,7 @@
 #include <core/version.h>           // Master version, includes master config.h
 #include <core/arch/boot.h>         // Limine API vectors and helpers
 #include <core/arch/cpu.h>          // CPU tables, CPUID, TSC-clock
-#include <core/arch/serial.h>       // Serial driver, read-only, default is COM1, 115200 baud
+#include <core/arch/serial.h>       // Serial driver, transmits to COM1 at 115200 baud
 #include <core/arch/gdt.h>          // Global descriptor table, ring 0
 #include <core/arch/idt.h>          // Interrupt Descriptor Table, 256 vectors
 #include <core/arch/pic.h>          // 8259 PIC Driver, virtual wires (LAPIC), interrupt platform
@@ -15,18 +15,19 @@
 #include <core/arch/heap.h>         // Block headers, Immediate coalescing, pmm_alloc_contig via HHDM
 
 /* kernel devices */
-#include <core/dev/console.h>   // Console device, ps/2, serial
+#include <core/dev/console.h>   // Console device, ps/2
 #include <core/dev/vfs.h>       // Virtual File System, ramfs
 #include <core/dev/timer.h>     // Clock controller
 #include <core/dev/env.h>       // Environment variable store device
 
 /* kernel modules */
-#include <core/bus.h>       // Bus registry, late device discovery
+#include <core/bus.h>       // Bus registry, late device discovery (ref: kernel devices)
 #include <core/kprintf.h>   // Formatted output to every console
 #include <core/klog.h>      // Kernel logger extension (kern, info, warn, error)
 #include <core/ext.h>       // Extension-module dispatcher
 #include <core/cmd.h>       // Command-line dispatcher
 #include <core/shell.h>     // Shell Manager (ref: cmd.h)
+#include <ext/proxy/proxy.h> // Bus proxy extension (featured interpreter)
 
 void kmain(void) {
     // Limine validation logic or hang forever
@@ -50,13 +51,7 @@ void kmain(void) {
     idt_init();
 
     pmm_init();                 // memory
-    //struct pmm_stats pm = pmm_get_stats();
-    //klog_info("PMM: (%zu MiB usable)\n", (pm.free_frames * PMM_PAGE_SIZE) / (1024 * 1024));
-
     heap_init();                // memory
-    //struct heap_stats hs = heap_get_stats();
-    //klog_info("HEAP: (%zu KiB free)\n", hs.bytes_free / 1024);
-
     vmm_init();                 // memory
 
     pic_init();                 // interrupts
@@ -67,15 +62,19 @@ void kmain(void) {
 
     env_init(0,0);                 // environment (0 = default)
 
+    bus_settle();               // write device manifest to env
+
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
 
     /* stage two: extensions */
     ext_init_all();             // extensions
+    cmd_selfcheck();            /* catch command-spec typos at boot, after ext registration */
 
     /* greeter */
     klog_info("Stage 2 complete (ext: %zu, sys: %zu)\n", ext_count(), cmd_count());
 
     /* launch shell */
     shell_run();
+    cpu_halt_forever();         /* shell_run should not return; avoid bare-metal fallthrough UB */
 }
