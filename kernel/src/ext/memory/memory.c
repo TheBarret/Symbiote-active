@@ -30,7 +30,11 @@ static const char *memmap_type_name(uint64_t type) {
 static void fmt_size(uint64_t bytes, char *out, size_t out_sz) {
     if (bytes >= 1024ull * 1024ull) {
         uint64_t mib = bytes / (1024ull * 1024ull);
-        uint64_t rem = (bytes % (1024ull * 1024ull)) / 1024ull;
+
+        // incorrect decimals
+        //uint64_t rem = (bytes % (1024ull * 1024ull)) / 1024ull;
+        uint64_t rem = (bytes % (1024ull * 1024ull)) * 1000ull / (1024ull * 1024ull);
+
         ksnprintf(out, out_sz, "%llu.%03llu MiB",
                   (unsigned long long)mib, (unsigned long long)rem);
     } else if (bytes >= 1024) {
@@ -323,9 +327,9 @@ static int test_heap_realloc(void) {
 }
 
 static int test_vmm_map_unmap(void) {
-    uint64_t va = VMM_DYNAMIC_BASE;
+    uint64_t va = VMM_DYNAMIC_VMTEST;
     if (vmm_translate(va) != 0) {
-        kprintf("  vmm_map_unmap: SKIP (VMM_DYNAMIC_BASE already mapped)\n");
+        kprintf("  vmm_map_unmap: SKIP (VMM_DYNAMIC_VMTEST already mapped)\n");
         return 0;
     }
 
@@ -448,7 +452,10 @@ static int cmd_heaptest_fn(const struct cmd_args *a) {
     size_t live_before = before.blocks - before.blocks_free;
     size_t live_after  = after.blocks  - after.blocks_free;
 
-    if (after.bytes_used != before.bytes_used || live_after != live_before) {
+    if (after.bytes_used != before.bytes_used ||
+        live_after != live_before ||
+        after.blocks != before.blocks ||
+        after.blocks_free != before.blocks_free) {
         kprintf("Heaptest: leak: used %zu -> %zu bytes, live blocks %zu -> %zu\n",
                 before.bytes_used, after.bytes_used, live_before, live_after);
         return 1;
