@@ -7,6 +7,7 @@
 #include <core/arch/heap.h>
 #include <core/dev/timer.h>
 #include <core/dev/env.h>
+#include <core/mask.h>
 #include <core/panic.h>
 #include <core/klog.h>
 #include <core/bus.h>
@@ -157,6 +158,7 @@ static struct env_entry *env_pick_victim(struct env_device *e,
     for (size_t i = 0; i < e->capacity; i++) {
         struct env_entry *s = &e->entries[i];
         if (!s->live || s == exclude) continue;
+        if (s->mask & ENV_FLAG_PINNED) continue; /* immune to space-pressure eviction */
         if (victim == NULL) { victim = s; continue; }
         if (s->importance < victim->importance) { victim = s; continue; }
         if (s->importance > victim->importance) continue;
@@ -223,6 +225,12 @@ static int env_set(const char *ns, const char *name, const char *value,
     /* Reap first so a stale duplicate can't coexist with the new entry. */
     env_reap_expired(e);
     struct env_entry *existing = env_find(e, ns, ns_len, name, name_len);
+
+    /* READONLY: reject overwrite; caller must unset first. */
+    if (existing != NULL && (existing->mask & ENV_FLAG_READONLY)) {
+        kfree(n_ns); kfree(n_name); kfree(n_value);
+        return ENV_READONLY;
+    }
 
     if (!env_make_room(e, footprint, existing)) {
         kfree(n_ns); kfree(n_name); kfree(n_value);
@@ -547,12 +555,6 @@ static const struct env_ops env_bus_ops = {
     .drop_namespace = env_drop_namespace,
 };
 
-// Ref: defined at bus.h
-//const struct env_ops *bus_env(void) {
-//    const struct bus_device *d = bus_find_class(BUS_CLASS_ENV, 0);
-//    return (d != NULL) ? (const struct env_ops *)d->ops : NULL;
-//}
-
 /* init */
 
 void env_init(size_t max_entries, size_t max_bytes) {
@@ -591,7 +593,7 @@ void env_init(size_t max_entries, size_t max_bytes) {
         .version      = 1,
         .ops          = &env_bus_ops,
         .private_data = e,
-        .owner_id     = 3,
+        .owner_id     = BUS_ENV_ID,
     };
     bus_register(&dev);
     bus_test("env");

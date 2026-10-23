@@ -34,7 +34,8 @@
 enum env_result {
     ENV_OK                =  0,
     ENV_NOT_FOUND         = -1,   /* no such entry (expired entries read as absent) */
-    /* -2, -3 reserved (unused: ENV_EXPIRED / ENV_ACCESS_EXHAUSTED) */
+    ENV_READONLY          = -2,   /* set() refused: existing entry has ENV_FLAG_READONLY */
+    /* -3 reserved (unused: ENV_ACCESS_EXHAUSTED) */
     ENV_NO_SPACE          = -4,   /* set() could not make room */
     ENV_INVALID_ARGS      = -5,   /* NULL args, empty name, oversized value, zero mask query */
     ENV_NO_DEVICE         = -6,   /* bus_env() returned NULL / device destroyed */

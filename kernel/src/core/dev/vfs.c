@@ -31,6 +31,9 @@ struct vfs_node {
     uint8_t *data;
     uint64_t size;
 
+    uint32_t refs;              /* open handles; unlink defers free until 0 */
+    bool     dead;              /* unlinked from tree; free when refs == 0 */
+
     struct vfs_node *children;
     struct vfs_node *next;
 };
@@ -239,6 +242,7 @@ struct vfs_file *vfs_open(const char *path, int flags) {
 
     f->node = node;
     f->flags = flags;
+    node->refs++;
     if (flags & VFS_O_APPEND)
         f->pos = node->size;
 
@@ -247,17 +251,31 @@ struct vfs_file *vfs_open(const char *path, int flags) {
 }
 
 void vfs_close(struct vfs_file *f) {
+    if (!f)
+        return;
+    uint64_t lock = vfs_acquire();
+    struct vfs_node *n = f->node;
+    if (n) {
+        if (n->refs > 0)
+            n->refs--;
+        if (n->dead && n->refs == 0)
+            node_free_recursive(n);
+    }
+    vfs_release(lock);
     kfree(f);
 }
 
 long vfs_read(struct vfs_file *f, void *buf, size_t n) {
     if (!f || !buf)
         return -1;
-    if (f->flags == VFS_O_WRONLY)
+    /* RDONLY = 0; WRONLY alone (possibly OR'd with CREAT/TRUNC/APPEND) denies read. */
+    if ((f->flags & (VFS_O_WRONLY | VFS_O_RDWR)) == VFS_O_WRONLY)
         return -1;
 
     uint64_t lock = vfs_acquire();
-    long rv;
+    long rv = -1;
+    if (!f->node)
+        goto out;
     if (f->pos >= f->node->size) {
         rv = 0;
     } else {
@@ -268,6 +286,7 @@ long vfs_read(struct vfs_file *f, void *buf, size_t n) {
         f->pos += n;
         rv = (long)n;
     }
+out:
     vfs_release(lock);
     return rv;
 }
@@ -275,18 +294,20 @@ long vfs_read(struct vfs_file *f, void *buf, size_t n) {
 long vfs_write(struct vfs_file *f, const void *buf, size_t n) {
     if (!f || !buf)
         return -1;
-    if (f->flags == VFS_O_RDONLY)
+    /* Need an explicit write bit; bare RDONLY (0) or RDONLY|CREAT must fail. */
+    if (!(f->flags & (VFS_O_WRONLY | VFS_O_RDWR)))
         return -1;
 
     uint64_t lock = vfs_acquire();
     long rv = -1;
+    uint64_t end;
 
+    if (!f->node)
+        goto out;
     if (f->pos + n < f->pos)
         goto out;
 
-    uint64_t end = f->pos + n;
-    if (end > SIZE_MAX)
-        goto out;
+    end = f->pos + n;
 
     if (end > f->node->size) {
         uint8_t *fresh = krealloc(f->node->data, (size_t)end);
@@ -413,9 +434,11 @@ int vfs_unlink(const char *path) {
     if (*pp)
         *pp = node->next;
 
-    vfs_release(lock);
+    node->dead = true;
+    if (node->refs == 0)
+        node_free_recursive(node);
 
-    node_free_recursive(node);
+    vfs_release(lock);
     return 0;
 }
 
@@ -501,7 +524,7 @@ void vfs_init(void) {
         .version      = 1,
         .ops          = &vfs_impl,
         .private_data = NULL,
-        .owner_id     = 4,
+        .owner_id     = BUS_VFS_ID,
     };
     bus_register(&dev);
     bus_test("vfs");

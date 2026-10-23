@@ -19,17 +19,13 @@
  * There is no block layer; a future disk filesystem would put its own block cache inside its implementation.
  */
 
-// Moved to ref: core/version.h
-//#define VFS_PATH_MAX 128
-//#define VFS_NAME_MAX 32
-
 enum vfs_type {
     VFS_FILE,
     VFS_DIR,
 };
 
 enum vfs_open_flags {
-    VFS_O_RDONLY = 0,
+    VFS_O_RDONLY = 0,           /* "no write bits set", not a distinct bit */
     VFS_O_WRONLY = 1 << 0,
     VFS_O_RDWR   = 1 << 1,
     VFS_O_CREAT  = 1 << 2,
@@ -37,7 +33,12 @@ enum vfs_open_flags {
     VFS_O_APPEND = 1 << 4,
 };
 
-/* An open file. The caller owns the struct and passes it back to read / write / close. Its contents are opaque. */
+/* An open file. The caller owns the struct and passes it back to read / write / close. Its contents are opaque.
+ *
+ * Unlink contract: vfs_unlink unhooks the node from the tree immediately.
+ * Open handles keep the node alive (refcount); the node is freed on the
+ * last vfs_close. Reads/writes on an unlinked node still see its data
+ * until close; path lookup will not find it. */
 struct vfs_file;
 
 /* Node metadata, as returned by vfs_stat. */
@@ -71,8 +72,9 @@ int vfs_stat(const char *path, struct vfs_stat *out);
 
 /* List directory entries, one name at a time.
  * Set *iter to 0 on the first call; it is advanced internally.
- * Returns true and writes the next name to `name` (up to VFS_NAME_MAX),
- * or false when there are no more entries. */
+ * Returns true and writes the next name to `name` (NUL-terminated).
+ * The caller must provide a buffer of at least VFS_NAME_MAX + 1 bytes.
+ * Returns false when there are no more entries. */
 bool vfs_readdir(const char *path, size_t *iter, char *name);
 
 
