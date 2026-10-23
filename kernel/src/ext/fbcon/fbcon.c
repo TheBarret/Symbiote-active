@@ -59,7 +59,7 @@ static int fbcon_init(void) {
         fb->blue_mask_size, fb->blue_mask_shift,
         NULL,                               /* no canvas */
         NULL, NULL,                         /* default ANSI colours */
-        &theme_bg, &theme_fg,               /* our default background / foreground */
+        &theme_bg, &theme_fg,               /* default background / foreground */
 
         /* Fonts */
         /* NULL, NULL,                          default bright variants */
