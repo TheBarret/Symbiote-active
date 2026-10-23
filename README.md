@@ -69,9 +69,9 @@ kernel/
 
 Added overflow-safe millisecond→tick conversions with explicit rounding policy at every call site:  
 
-- `ms_to_ticks_floor` — largest tick count ≤ `ms`
-- `ms_to_ticks_ceil` — smallest tick count ≥ `ms`
-- `ms_to_ticks_round` — nearest tick count
+- `ms_to_ticks_floor`, largest tick count ≤ `ms`
+- `ms_to_ticks_ceil`, smallest tick count ≥ `ms`
+- `ms_to_ticks_round`, nearest tick count
 
 `timer_sleep_ms` and `timer_after` now use `_ceil` ("at least this long" semantics both always wanted implicitly).  
 All three saturate on overflow and treat `hz == 0` as "timer not initialized" (return 0).  
@@ -106,7 +106,7 @@ Per-entry policy:
 
 `ext/env/env.c`, `ext/envtool/`  
 
-`env` command-line tool plus `envtool` — a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
+`env` command-line tool plus `envtool`, a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
 
 <img width="836" height="429" alt="envtool" src="https://github.com/user-attachments/assets/c91cea1f-afd3-4cf0-9895-2e22ff042a4e" />
 
@@ -117,13 +117,13 @@ Per-entry policy:
 
 Converted PSF glyphs from the Debian console fonts. Selectable families:  
 
-- **Western Latin** — `default`, `lat`, `iso`
-- **IBM PC / DOS** — `cp…`, `alt`
-- **Cyrillic & Eastern European** — `Cyr`, `ruscii`, `koi8`, `Mik`
-- **Greek** — `gr`, `greek`, `gr737`
-- **Multi-script** — `LatArCyrHeb`
-- **Regional / Asian** — `Goha`, `arm`, `tis`, `tcvn`, `viscii`
-- **Accessibility** — `brl` (Braille)
+- **Western Latin**, `default`, `lat`, `iso`
+- **IBM PC / DOS**, `cp…`, `alt`
+- **Cyrillic & Eastern European**, `Cyr`, `ruscii`, `koi8`, `Mik`
+- **Greek**, `gr`, `greek`, `gr737`
+- **Multi-script**, `LatArCyrHeb`
+- **Regional / Asian**, `Goha`, `arm`, `tis`, `tcvn`, `viscii`
+- **Accessibility**, `brl` (Braille)
 
 ## Interpreter, stage 1
 `ext/tokenizer/`, `ext/proxy/`  
