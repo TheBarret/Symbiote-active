@@ -37,9 +37,10 @@
  * Ref: src/core/timer.h
  * Ref: src/core/timer.c
  *
- * TIMER_HZ is the requested rate; the PIT divisor is an integer, so the
- * actual rate is PIT_FREQ / (PIT_FREQ / TIMER_HZ), which is close to but
- * not exactly TIMER_HZ. Query timer_hz() for the real value. */
+ * TIMER_HZ is the requested rate; the PIT divisor is an integer,
+ * so the actual rate is PIT_FREQ / (PIT_FREQ / TIMER_HZ),
+ * which is close to but not exactly TIMER_HZ. Query timer_hz() for the real value.
+ */
 #define TIMER_HZ  1000
 #define PIT_FREQ  1193182ull        /* Hz, the PIT's input clock */
 #define PIT_CH0   0x40
@@ -87,18 +88,29 @@
  */
 #define BUS_MAX_DEVICES 32
 
-/* Bus ID table (hardcoded)
+/* Bus owner-ID table (hardcoded). Do not index this table with bus_class
+ * values from bus.h (or vice versa), even when the numbers look aligned.
  * Ref: src/core/bus.h
  * Ref: src/core/mask.h
  */
-#define BUS_KERN_ID             0u // default or fallback
-#define BUS_CONSOLE_ID          1u
-#define BUS_TIMER_ID            2u
-#define BUS_ENV_ID              3u
-#define BUS_VFS_ID              4u
-#define BUS_BUS_ID              5u
-#define BUS_INTPR               6u
-#define BUS_PROXY               7u
+#define BUS_KERN_ID             1u // default or fallback
+#define BUS_CONSOLE_ID          2u
+#define BUS_TIMER_ID            3u
+#define BUS_ENV_ID              4u
+#define BUS_VFS_ID              5u
+#define BUS_BUS_ID              6u
+#define BUS_INTPR               7u
+#define BUS_PROXY               8u
+
+_Static_assert(BUS_KERN_ID    <= 0xFF &&
+               BUS_CONSOLE_ID <= 0xFF &&
+               BUS_TIMER_ID   <= 0xFF &&
+               BUS_ENV_ID     <= 0xFF &&
+               BUS_VFS_ID     <= 0xFF &&
+               BUS_BUS_ID     <= 0xFF &&
+               BUS_INTPR      <= 0xFF &&
+               BUS_PROXY      <= 0xFF,
+               "owner IDs must fit mask OWNER field");
 
 
 /* Command dispatcher settings

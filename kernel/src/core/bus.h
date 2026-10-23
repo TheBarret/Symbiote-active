@@ -60,7 +60,7 @@ struct bus_device {
     uint16_t        version;       /* module revision, exposed to scripts */
     const void      *ops;          /* struct <class>_ops *, cast on lookup; must not be NULL */
     void            *private_data; /* backend state, opaque to the bus */
-    uint16_t        owner_id;      /* unique identifier  */
+    uint8_t         owner_id;      /* unique identifier; must fit mask OWNER (8 bits) */
 };
 
 /* Zero the table. First thing after serial_init() in kmain,
@@ -79,10 +79,15 @@ void bus_init(void);
  *   - dev->ops is NULL
  *   - the name is already registered (first registrant wins)
  *
- * Registration only during kmain and ext_init_all(). */
+ * Registration only during kmain and ext_init_all().
+ *
+ * Policy: registration is best-effort. Callers need not check the return;
+ * a failed registration means the device is reachable only through its
+ * direct API (typed finders / bus_find will not see it). */
 int bus_register(const struct bus_device *dev);
 
-/* Self-test. Looks up name, checks the miss path and the console finder. */
+/* Boot-time sanity probe: looks up name so the log confirms the bus saw
+ * this module (bus->check_device). Returns 0 always. */
 int bus_test(const char *name);
 
 /* Generic lookup. Returns NULL if not found.
@@ -103,8 +108,8 @@ const struct bus_device *bus_at(size_t index);
 
 
 /* Returns the manually assigned owner ID of a device. */
- static inline uint16_t bus_owner_id(const struct bus_device *dev) {
-    return (dev != NULL) ? dev->owner_id : BUS_CLASS_NONE;
+static inline uint8_t bus_owner_id(const struct bus_device *dev) {
+    return (dev != NULL) ? dev->owner_id : (uint8_t)BUS_KERN_ID;
 }
 
 void bus_settle(void);

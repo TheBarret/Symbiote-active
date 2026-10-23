@@ -145,21 +145,21 @@ void bus_publish_manifest(void) {
         ksnprintf(buf_id, sizeof(buf_id), "%u", (unsigned)dev->owner_id);
         ret_value = env->set(ns, "id", buf_id, 0, 0, 0, m);
         /* validate */
-        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %u", ret_value); }
+        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
 
         /* CLASS */
         char buf_class[16];
         ksnprintf(buf_class, sizeof(buf_class), "%u", (unsigned)dev->class);
         ret_value = env->set(ns, "class", buf_class, 0, 0, 0, m);
         /* validate */
-        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %u", ret_value); }
+        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
 
         /* VERSION */
         char buf_ver[16];
         ksnprintf(buf_ver, sizeof(buf_ver), "%u", (unsigned)dev->version);
         ret_value = env->set(ns, "version", buf_ver, 0, 0, 0, m);
         /* validate */
-        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %u", ret_value); }
+        if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
     }
     klog_env("→ bus manifest published: kernel.dev.*\n");
 }

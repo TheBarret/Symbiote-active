@@ -28,8 +28,9 @@ static void emit_repeat(emit_fn emit, void *ctx, char c, size_t n) {
  *
  * `zero` pads with '0' between the prefix and the digits, at the field's request;
  * `prec` pads with '0' between the prefix and the digits, at the value's request.
- * Only one of them is typically non-zero, but if both are, the digits pad goes first,
- * then the field pad: this matches what printf does for "%08.5x".
+ * Only one of them is typically non-zero, but if both are, the field-pad zeros go first,
+ * then the digits-pad zeros: this matches what printf does for "%08.5x".
+ * (Both are '0' today; if they ever differ, keep emit_field's order, not this comment's old wording.)
  */
 struct field {
     const char *prefix;  size_t plen;
@@ -161,6 +162,9 @@ void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
         case 'i': {
             long long v;
             switch (len) {
+            /* Reads long long for all 64-bit ints; safe on x86_64 SysV where
+             * long == long long, UB by the C standard otherwise. Do not port
+             * to 32-bit without splitting this branch. */
             case LEN_LL:
             case LEN_L:
             case LEN_Z: v = va_arg(ap, long long);          break;
@@ -250,7 +254,8 @@ static void con_flush(struct con_sink *s) {
 
 static void con_emit(void *ctx, char c) {
     struct con_sink *s = ctx;
-    s->buf[s->len++] = c;
+    if (s->len < sizeof s->buf)
+        s->buf[s->len++] = c;
     if (s->len == sizeof s->buf)
         con_flush(s);
 }

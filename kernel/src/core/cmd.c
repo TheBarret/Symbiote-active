@@ -41,9 +41,6 @@ void cmd_print_usage(const struct sym_cmd *c) {
 
 /*  parameter spec  */
 
-// Moved to: core/config.h
-//#define TOK_MAX 24      /* longest single parameter, e.g. "[iterations:num]" */
-
 struct param {
     char tok[TOK_MAX];  /* the parameter exactly as written, for messages */
     enum { P_STR, P_NUM } type;
@@ -51,8 +48,9 @@ struct param {
     bool rest;
 };
 
-/* Parse a spec string into out[]. Returns NULL on success, or a short reason
- * the spec is malformed (that is a bug in the command, not in the user). */
+/* Parse a spec string into out[]. Returns NULL on success,
+ * or a short reason the spec is malformed (that is a bug in the command, not in the user).
+ */
 static const char *parse_spec(const char *s, struct param *out, int *count) {
     int n = 0;
     bool seen_optional = false;
@@ -125,7 +123,7 @@ static const char *parse_spec(const char *s, struct param *out, int *count) {
     return NULL;
 }
 
-/*  numbers --- */
+/*  numbers */
 
 enum num_status { NUM_OK, NUM_BAD, NUM_OVERFLOW };
 
@@ -235,8 +233,8 @@ int cmd_selfcheck(void) {
             continue;
         }
 
-        /* Command names must be non-empty and contain no spaces: the shell
-         * tokenizes on spaces, so a name with one could never be typed. */
+        /* Command names must be non-empty and contain no spaces:
+         * the shell tokenizes on spaces, so a name with one could never be typed. */
         if (strcspn(c->name, " \t") != strlen(c->name)) {
             kprintf("Warning: '%s' has whitespace in its name\n", c->name);
             problems++;

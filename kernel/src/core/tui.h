@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <core/dev/keyboard.h>
 
-/* Micro Terminal UI core
+/* Text-based User Interface
  *
  * Two cell grids (front and back), a rect-based drawing API,
  * and a flush that emits only the cells that changed.
