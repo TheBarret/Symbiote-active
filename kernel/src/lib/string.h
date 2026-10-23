@@ -26,8 +26,9 @@ char *strstr(const char *haystack, const char *needle);
 
 /* Parse an unsigned integer from s, in base `base` (0 = auto-detect from
  * prefix, 10 = decimal, 16 = hex). Skips leading whitespace. If endp is
- * non-NULL, *endp is set to the first unconsumed character.
- * On overflow, returns UINT64_MAX and sets errno-free `*endp` to s. */
+ * non-NULL, *endp is set to the first unconsumed character (on overflow:
+ * the last consumed position, matching standard strtoull).
+ * On overflow, returns UINT64_MAX. */
 uint64_t strtoull(const char *s, char **endp, int base);
 
 /* Same, signed. Accepts a leading '+' or '-'. */

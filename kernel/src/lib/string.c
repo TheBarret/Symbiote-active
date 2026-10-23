@@ -147,8 +147,6 @@ static int digit_value(char c) {
 }
 
 uint64_t strtoull(const char *s, char **endp, int base) {
-    const char *start = s;
-
     while (*s == ' ' || *s == '\t' || *s == '\n' ||
            *s == '\r' || *s == '\v' || *s == '\f')
         s++;
@@ -174,7 +172,7 @@ uint64_t strtoull(const char *s, char **endp, int base) {
         if (d < 0 || d >= base)
             break;
         if (v > (UINT64_MAX - (uint64_t)d) / (uint64_t)base) {
-            if (endp) *endp = (char *)start;
+            if (endp) *endp = (char *)last;
             return UINT64_MAX;
         }
         v = v * (uint64_t)base + (uint64_t)d;
@@ -216,7 +214,9 @@ int64_t strtoll(const char *s, char **endp, int base) {
 
     if (endp)
         *endp = inner_end;
-    return neg ? -(int64_t)mag : (int64_t)mag;
+    /* Unsigned subtraction then reinterpret: avoids signed overflow UB on INT64_MIN. */
+    if (neg) return (int64_t)(0 - mag);
+    return (int64_t)mag;
 }
 
 /* strtoull */
