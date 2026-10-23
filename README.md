@@ -2,20 +2,17 @@
 <img width="1024" height="559" alt="logo" src="https://github.com/user-attachments/assets/808c960e-6db9-469d-93ed-fd51f01e92cf" />  
 
 Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
-
 **Current goal is to implement layers that accommodate a custom interpreter**  
 
-**0.1.1** - Major overhaul of the core
+**Acknowledgements**  
+Symbiote was developed with assistance from Claude (Anthropic), DeepSeek, and CursorAI, used for architectural review, code generation, and audit passes.  
+All code is reviewed and owned by the maintainer; the tools are collaborators, not authors.  
 
 <img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/9e86190d-187f-4c27-af27-4faec2393479" />  
-
 
 ## Project Files & Structure
 
 <img width="872" height="486" alt="bootsequence" src="https://github.com/user-attachments/assets/9bc9ffed-7564-4407-be3c-5eb930f5f766" />
-
-
-
 
 ```
 kernel/
@@ -65,7 +62,7 @@ kernel/
           └── assets/                 # Static resources & embedded binary payloads
 
 ```
-# Changelog
+# Changelog 0.1.1
 
 ## Core: timer conversions
 `core/timer.h`, `core/timer.c`  
@@ -76,7 +73,7 @@ Added overflow-safe millisecond→tick conversions with explicit rounding policy
 - `ms_to_ticks_ceil` — smallest tick count ≥ `ms`
 - `ms_to_ticks_round` — nearest tick count
 
-`timer_sleep_ms` and `timer_after` now use `_ceil`, which is the "at least this long" semantics both always wanted implicitly.  
+`timer_sleep_ms` and `timer_after` now use `_ceil` ("at least this long" semantics both always wanted implicitly).  
 All three saturate on overflow and treat `hz == 0` as "timer not initialized" (return 0).  
 
 ## Core: environment device
