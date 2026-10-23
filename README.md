@@ -82,10 +82,10 @@ All three saturate on overflow and treat `hz == 0` as "timer not initialized" (r
 A bounded, fixed-capacity store of `(namespace, name) → value` entries, registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.  
 
 Per-entry policy:  
-- **access budget** — reclaimed synchronously when exhausted
-- **time budget (TTL)** — reclaimed asynchronously by a timer-driven sweeper
-- **importance** — eviction order under space pressure (higher = more valuable)
-- **mask** — free-form classification bits, searchable via `list_by_mask` / `count_by_mask`
+- **access budget**: reclaimed synchronously when exhausted
+- **time budget (TTL)**: reclaimed asynchronously by a timer-driven sweeper (60,000 ticks at 1000 Hz is exactly 60 seconds or 1 minute)
+- **importance**: eviction order under space pressure (rng: 0 = persistent - 10 = volatile)
+- **mask**: free-form classification bits, searchable via `list_by_mask` / `count_by_mask`
 
 `mask.h` defines the 32-bit field layout:  
 
