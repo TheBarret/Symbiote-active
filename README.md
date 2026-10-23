@@ -65,75 +65,89 @@ kernel/
           └── assets/                 # Static resources & embedded binary payloads
 
 ```
+# Changelog
 
+## Core: timer conversions
+`core/timer.h`, `core/timer.c`  
 
-- All interior `core/*` modules have been refactored and aligned, and have added safety logic.
-  
-- `core/timer.h`, `core/timer.c`:  
-  added helpers for milliseconds to timer ticks conversions (`ms_to_ticks_floor`, `ms_to_ticks_ceil`,`ms_to_ticks_round`).
-  Rounding policy is now explicit at every call site, and the conversions are overflow-safe.
-  `timer_sleep_ms` and `timer_after` were updated to use the ceil variant, which is what both have always implicitly wanted.
+Added overflow-safe millisecond→tick conversions with explicit rounding policy at every call site:  
 
-- `core/env.c`, `core/env.h`, `ext/env/env.c`:  
-  added the `environment` device and its shell toolkit. A bounded, fixed-capacity store of `(namespace, name) -> value` entries,
-  with per-entry access budgets, time budgets, importance levels, and free-form classification masks.
-  Reclamation follows OOM-model principles: entries are reclaimed synchronously when their access budget is exhausted,
-  asynchronously by a timer-driven sweeper when their time budget passes, and under space pressure by an importance-ordered eviction policy.
-  The device is registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
+- `ms_to_ticks_floor` — largest tick count ≤ `ms`
+- `ms_to_ticks_ceil` — smallest tick count ≥ `ms`
+- `ms_to_ticks_round` — nearest tick count
 
-- `ext/envtool/`: added the `envtool` using the `TUI` engine to browse inspect and stress test the `environment` variable store.
+`timer_sleep_ms` and `timer_after` now use `_ceil`, which is the "at least this long" semantics both always wanted implicitly.  
+All three saturate on overflow and treat `hz == 0` as "timer not initialized" (return 0).  
 
-- `mask.h`: added contracts and functions that can encode and decode the `MASK` bit field used in the `env.h`;  
-  Bit layout:
-  ```bash
-        | 31    24 | 23  20 | 19  16 | 15              0 |
-        +----------+--------+--------+-------------------+
-        |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
-        | (8 bits) | (4 bit)| (4 bit)|    (16 bits)      |
-        +----------+--------+--------+-------------------+
-   ````
-  *(Flag bits are not enforced as of yet!)*
+## Core: environment device
+`core/env.c`, `core/env.h`, `core/mask.h`, `core/bus.c`  
 
-- `bus.c`: added `manifest` function, catalogues the entire bus registry, pushes information on the `environment` store.  
-- `ext/fbcon/fbcon.c` : writes `column, row, width, height` manifest to `env` store.
-- `tui.c`: added `tui_fetch_resolution()`, uses the `env` store to obtain framebuffer width and height.
-- `tui.c`: added `CP437` charsets, for primitive panels.
-- `ext/envtool/envtool.c`: added `CP437` support.
+A bounded, fixed-capacity store of `(namespace, name) → value` entries, registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.  
 
-  <img width="836" height="429" alt="envtool" src="https://github.com/user-attachments/assets/c91cea1f-afd3-4cf0-9895-2e22ff042a4e" />
+Per-entry policy:  
+- **access budget** — reclaimed synchronously when exhausted
+- **time budget (TTL)** — reclaimed asynchronously by a timer-driven sweeper
+- **importance** — eviction order under space pressure (higher = more valuable)
+- **mask** — free-form classification bits, searchable via `list_by_mask` / `count_by_mask`
 
+`mask.h` defines the 32-bit field layout:  
 
-- `ext/tokenizer/tokenizer.c`: added a token parser, first stage of the interpreter.  
-  data-types: `string, int, hex`
-  structures: `symbolics, identifiers = (functions), keywords = (use, let, while, if, else)`  
+```
+     31      24 23    20 19    16 15                 0
+    +----------+--------+--------+-------------------+
+    |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
+    | (8 bits) |(4 bits)|(4 bits)|    (16 bits)      |
+    +----------+--------+--------+-------------------+
+```
 
-- `ext/proxy/proxy.h`, `ext/proxy/proxy.c`: added proxy module, inspired by Microsoft's [MarshalByRefobject](https://learn.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject?view=net-10.0).  
+`bus.c`'s `bus_publish_manifest()` catalogues the entire registry into `kernel.dev.<name>.*` under the env store.  
+`fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
 
-  Example of writing `Hello, World!` to console device using safe call mechanism:  
-  ```c
-  const struct proxy_ops *p = bus_proxy();
-  uint32_t h;
-  /* lease  */
-  if (p->bind("console", &h) == PROXY_OK) {
-      const char msg[] = "Hello, World!\0";
-      p->call(h, PROXY_CONSOLE_WRITE, (const uint8_t *)msg, sizeof msg, NULL, 0, NULL);
-      p->unbind(h);
-  }
-  ```
+> **Known gap:** `FLAGS` bits (notably `READONLY`, `PINNED`) are defined and published but not yet enforced by the store.  
 
-- `/ext/assets/fonts.h`: added converted PSF font glyphs (Debian default console fonts).
+## Shell toolkit
 
-- `/etc/fbcon/fbcon.c`: supports custom font glyps:
-  * Western Latin (`default`, `lat`, `iso`)
-  * IBM PC / DOS Code Page (`cp...`, `alt`)
-  * Cyrillic & Eastern European (`Cyr`, `ruscii`, `koi8`, `Mik`)
-  * Greek (`gr`, `greek`, `gr737`)
-  * Multi-Script / Universal (`LatArCyrHeb`)
-  * Regional & Asian Scripts (`Goha`, `arm`, `tis`, `tcvn`, `viscii`)
-  * Accessibility & Special Purpose, Braille (`brl`)
+`ext/env/env.c`, `ext/envtool/`  
 
-- `/core/arch/heap.c`: fixed incorrect sentinel field calculation inside `chunk_create`, updated leak (coalescing) condition test.
-- `ext/memory/memory.c`: fixed `fmt_size` incorrect decimal notation.
+`env` command-line tool plus `envtool` — a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
+
+<img width="836" height="429" alt="envtool" src="https://github.com/user-attachments/assets/c91cea1f-afd3-4cf0-9895-2e22ff042a4e" />
+
+`tui.c` gained `tui_fetch_resolution()` and a CP437 charset for primitive panels; `envtool` uses both.  
+
+## Console: custom fonts
+`ext/fbcon/`, `ext/assets/fonts.h`  
+
+Converted PSF glyphs from the Debian console fonts. Selectable families:  
+
+- **Western Latin** — `default`, `lat`, `iso`
+- **IBM PC / DOS** — `cp…`, `alt`
+- **Cyrillic & Eastern European** — `Cyr`, `ruscii`, `koi8`, `Mik`
+- **Greek** — `gr`, `greek`, `gr737`
+- **Multi-script** — `LatArCyrHeb`
+- **Regional / Asian** — `Goha`, `arm`, `tis`, `tcvn`, `viscii`
+- **Accessibility** — `brl` (Braille)
+
+## Interpreter, stage 1
+`ext/tokenizer/`, `ext/proxy/`  
+
+**`tokenizer`**  
+First stage of the interpreter, rrecognises data types `string`, `int`, `hex`;  
+structures `symbolics`, `identifiers` (functions), and keywords (`use`, `let`, `while`, `if`, `else`).   
+
+**`proxy`**  
+A `MarshalByRefObject`-style safe-call layer over the bus.  
+
+Consumers lease a handle by name, call methods by opcode, and unbind:  
+```c
+      const struct proxy_ops *p = bus_proxy();
+      uint32_t h;
+      if (p->bind("console", &h) == PROXY_OK) {
+          const char msg[] = "Hello, World!\0";
+          p->call(h, PROXY_CONSOLE_WRITE, (const uint8_t *)msg, sizeof msg, NULL, 0, NULL);
+          p->unbind(h);
+      }
+```
   
 ---
 
