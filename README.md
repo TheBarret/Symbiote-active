@@ -145,7 +145,26 @@ Consumers lease a handle by name, call methods by opcode, and unbind:
           p->unbind(h);
       }
 ```
-  
+
+## Keyboard Polling
+
+The keyboard is not on the `bus` but does write to the environment store;
+- keystrokes total   (accumulative)
+- chars total        (accumulative)
+- dropped total      (overflow)
+- scancode           (hexadecimal)
+- ticks              (accumulative)
+
+`keyboard.c` will update every `n`-ticks (defined at: `config.h`):  
+
+<img width="574" height="187" alt="env/kbd" src="https://github.com/user-attachments/assets/d1fa6d42-1ee2-41bd-af4b-7e5faf88c6c5" />
+
+*env command-line query*  
+
+<img width="925" height="439" alt="image" src="https://github.com/user-attachments/assets/1d0842c6-e10d-487b-a0ae-9588da771187" />  
+
+*env inspection viewer (uses TUI engine)*  
+
 ---
 
 # Third Party licenses
