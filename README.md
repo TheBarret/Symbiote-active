@@ -60,6 +60,22 @@ kernel/
           └── assets/                 # Static resources & embedded binary payloads
 
 ```
+
+## Building
+
+Requires a recent **GCC or Clang, GNU Make, and xorriso**.  
+First build fetches Limine and the freestanding headers, then compiles the kernel and assembles a hybrid BIOS/UEFI ISO.  
+```
+  make                # build everything, produce symbiote-x86_64.iso
+  make run-bios       # boot under QEMU, BIOS path
+  make run            # boot under QEMU, UEFI path
+  make run-serial     # boot headless, serial console to the terminal
+  make -C kernel size # report kernel size
+```
+
+Build with `CPPFLAGS=-DSYM_MEMDEBUG` to enable heap header magic, poison, and owner tagging.  
+Build with `EXTENSIONS="hello"` (looks for `hello.c`) for a headless image with only the smoke-test extension.  
+
 # Changelog 0.1.1
 
 ## Boot & Core
