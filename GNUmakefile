@@ -7,7 +7,7 @@ IMAGE_NAME := symbiote-x86_64
 # Extensions to build into the image (see kernel/src/ext/). Override like:
 #   make EXTENSIONS="hello"       headless image, serial console only
 # disabled: forth bf btool cpu vfs explorer
-EXTENSIONS ?= fbcon system memory env envtool proxy
+EXTENSIONS ?= fbcon system memory md env envtool proxy
 
 # Extra QEMU flags. -serial stdio sends the serial console to your terminal.
 QEMUFLAGS := -m 256M -serial stdio
