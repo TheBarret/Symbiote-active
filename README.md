@@ -69,6 +69,23 @@ Memory map and HHDM offset queried from the bootloader. additionally the ACPI, R
 
 <img width="872" height="486" alt="bootsequence" src="https://github.com/user-attachments/assets/9bc9ffed-7564-4407-be3c-5eb930f5f766" />  
 
+## Memory = Home
+
+<img width="1286" height="863" alt="memory testers" src="https://github.com/user-attachments/assets/10ae4fe5-8b63-4fe1-ab94-d5d3e3efb092" />  
+
+**Physical:**  
+Bitmap page allocator initialized from the bootloader's memory map. Hands out `4 KiB` frames and contiguous runs.  
+Bitmap placed in usable RAM via HHDM, not statically reserved.  
+
+**Virtual:**  
+4-level page tables cloned from Limine, CR3 taken over, `W^X` applied to kernel sections, and a small API for creating,  
+and modifying mappings in the current address space. `VMM_NOCACHE` supported for MMIO.  
+
+**Heap:**  
+Chunked free list with block headers and immediate coalescing. `kmalloc, kfree, kzalloc, krealloc`, grows by `256KiB` chunks from the PMM.  
+Debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, and owner tagging.  
+
+
 ## Core: timer conversions
 `core/timer.h`, `core/timer.c`  
 
