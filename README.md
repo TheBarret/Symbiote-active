@@ -108,7 +108,7 @@ Debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, and 
   - `ms_to_ticks_floor`, largest tick count ≤ `ms`
   - `ms_to_ticks_ceil`, smallest tick count ≥ `ms`
   - `ms_to_ticks_round`, nearest tick count
-  - `timer_sleep_ms` and `timer_after` now use `_ceil`
+  - `timer_sleep_ms` and `timer_after` now use `_ceil`  
     ("at least this long" semantics both always wanted implicitly).  
 
 All three saturate on overflow and treat `hz == 0` as "timer not initialized" (return 0).  
@@ -125,7 +125,7 @@ registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
 
 Per-entry policy:  
 - **access budget**: reclaimed synchronously when exhausted
-- **time budget (TTL)**: reclaimed asynchronously by a timer-driven sweeper.
+- **time budget (TTL)**: reclaimed asynchronously by a timer-driven sweeper.  
   (60,000 ticks at 1000 Hz is exactly 60 seconds or 1 minute)  
 - **importance**: eviction order under space pressure (rng: 0 = persistent - 10 = volatile)
 - **mask**: free-form classification bits, searchable via `list_by_mask` / `count_by_mask`
