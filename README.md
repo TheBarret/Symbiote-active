@@ -179,7 +179,7 @@ Per-entry policy:
   
   <img width="921" height="735" alt="memory dump" src="https://github.com/user-attachments/assets/85bc1942-5dee-456f-9bbb-9fbbaf8a04a0" />  
 
-## fbcon extension with Custom fonts
+## fbcon extension: PSF Glyph fonts
 
 `ext/fbcon/`, `ext/assets/fonts.h`:  
 
