@@ -74,8 +74,8 @@ Memory map and HHDM offset queried from the bootloader. additionally the ACPI, R
 <img width="1286" height="863" alt="memory testers" src="https://github.com/user-attachments/assets/10ae4fe5-8b63-4fe1-ab94-d5d3e3efb092" />  
 
 **Physical:**  
-Bitmap page allocator initialized from the bootloader's memory map. Hands out `4 KiB` frames and contiguous runs.  
-Bitmap placed in usable RAM via HHDM, not statically reserved.  
+Bitmap page allocator initialized from the bootloader's memory map.  
+Hands out `4 KiB` frames and contiguous runs, bitmap placed in usable RAM via HHDM, not statically reserved.  
 
 **Virtual:**  
 4-level page tables cloned from Limine, CR3 taken over, `W^X` applied to kernel sections, and a small API for creating,  
