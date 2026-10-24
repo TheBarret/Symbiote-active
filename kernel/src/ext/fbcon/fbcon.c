@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <core/version.h>
 #include <core/arch/boot.h>
+#include <core/arch/heap.h>
 #include <core/dev/console.h>
 #include <core/dev/env.h>
 #include <core/kprintf.h>
@@ -52,7 +53,8 @@ static int fbcon_init(void) {
         return 2;           /* only 32-bit RGB is supported */
 
     term = flanterm_fb_init(
-        NULL, NULL,                         /* no allocator yet: flanterm uses its own pool */
+        //NULL, NULL,                         no allocator, flanterm uses its own pool
+        kmalloc, NULL,                        /* use our own heap, kfree never used */
         fb->address, fb->width, fb->height, fb->pitch,
         fb->red_mask_size, fb->red_mask_shift,
         fb->green_mask_size, fb->green_mask_shift,
