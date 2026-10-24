@@ -96,7 +96,8 @@ Hands out `4 KiB` frames and contiguous runs, bitmap placed in usable RAM via HH
 and modifying mappings in the current address space. `VMM_NOCACHE` supported for MMIO.  
 
 **Heap:**  
-Chunked free list with block headers and immediate coalescing. `kmalloc, kfree, kzalloc, krealloc`, grows by `256KiB` chunks from the PMM.  
+Chunked free list with block headers and immediate coalescing.  
+`kmalloc, kfree, kzalloc, krealloc`, grows by `256KiB` chunks from the PMM.  
 Debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, and owner tagging.  
 
 <img width="1286" height="863" alt="memory testers" src="https://github.com/user-attachments/assets/10ae4fe5-8b63-4fe1-ab94-d5d3e3efb092" />  
@@ -127,7 +128,7 @@ Per-entry policy:
 - **access budget**: reclaimed synchronously when exhausted
 - **time budget (TTL)**: reclaimed asynchronously by a timer-driven sweeper.  
   (60,000 ticks at 1000 Hz is exactly 60 seconds or 1 minute)  
-- **importance**: eviction order under space pressure (rng: 0 = persistent - 10 = volatile)
+- **importance**: eviction order under space pressure (range of: 0 - 10; between persistent and volatile caches)
 - **mask**: free-form classification bits, searchable via `list_by_mask` / `count_by_mask`
 
   `mask.h` defines the 32-bit field layout:  
@@ -138,14 +139,14 @@ Per-entry policy:
       |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
       | (8 bits) |(4 bits)|(4 bits)|    (16 bits)      |
       +----------+--------+--------+-------------------+
-  ```
-  
-  `bus.c`'s `bus_publish_manifest()` catalogues the entire registry into `kernel.dev.<name>.*` under the env store.  
-  `fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
-  
+  ```  
   > **Remark:**  
   > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
   > where only the owner of the object can modify this value or parameters, but you can `unset` (erase) them.  
+
+- `bus.c` added `bus_publish_manifest()`, this catalogues the bus registry: `kernel.dev.<name>.*` on the env store.  
+- `fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
+
 
   **Overwrite policy:**  
 
