@@ -11,9 +11,6 @@ All code is reviewed and owned by the maintainer; the tools are collaborators, n
 <img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/9e86190d-187f-4c27-af27-4faec2393479" />  
 
 ## Project Files & Structure
-
-<img width="872" height="486" alt="bootsequence" src="https://github.com/user-attachments/assets/9bc9ffed-7564-4407-be3c-5eb930f5f766" />
-
 ```
 kernel/
   └── src/
@@ -63,6 +60,13 @@ kernel/
 
 ```
 # Changelog 0.1.1
+
+## Boot & Core
+
+Booting from an ISO under BIOS and UEFI, verified against the Limine protocol revision at every startup.  
+Memory map and HHDM offset queried from the bootloader. additionally the ACPI, RSDP, and boot modules are queried via the same request mechanism.  
+
+<img width="872" height="486" alt="bootsequence" src="https://github.com/user-attachments/assets/9bc9ffed-7564-4407-be3c-5eb930f5f766" />  
 
 ## Core: timer conversions
 `core/timer.h`, `core/timer.c`  
@@ -175,8 +179,9 @@ The keyboard is not on the `bus` but does write to the environment store;
 - dropped total      (overflow)
 - scancode           (hexadecimal)
 - ticks              (accumulative)
+- last_char          (only printable keystrokes are recorded, no `CRLF` or `TAB`, etc)
 
-`keyboard.c` will update every `n`-ticks (defined at: `config.h`):  
+`keyboard.c` uses the `timer_after()` to update every `n`-ticks (defined at: `config.h`):  
 
 <img width="574" height="187" alt="env/kbd" src="https://github.com/user-attachments/assets/d1fa6d42-1ee2-41bd-af4b-7e5faf88c6c5" />
 
