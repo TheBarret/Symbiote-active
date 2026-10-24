@@ -8,7 +8,8 @@ Continuation of the symbiote kernel in an isolated repo, this version will be ac
 Symbiote was developed with assistance from Claude (Anthropic), DeepSeek, and CursorAI, used for architectural review, code generation, and audit passes.  
 All code is reviewed and owned by the maintainer; the tools are collaborators, not authors.  
 
-<img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/9e86190d-187f-4c27-af27-4faec2393479" />  
+<img width="1286" height="863" alt="demo" src="https://github.com/user-attachments/assets/aa6693f2-d1ef-4855-a9ed-fe4eedee4c7b" />  
+
 
 ## Project Files & Structure
 ```
