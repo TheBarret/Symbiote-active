@@ -15,6 +15,7 @@ All code is reviewed and owned by the maintainer; the tools are collaborators, n
 ```
 kernel/
   └── src/
+      ├── main.c                      # Limine->kmain() entrypoint, initializers
       ├── core/
       │   ├── arch/                   # Low-level architecture & hardware abstractions (absolute ground-zero)
       │   │   ├── boot.h              # Limine bootloader API vectors & boot validation
