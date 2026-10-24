@@ -85,9 +85,7 @@ Memory map and HHDM offset queried from the bootloader. additionally the ACPI, R
 
 <img width="872" height="486" alt="bootsequence" src="https://github.com/user-attachments/assets/9bc9ffed-7564-4407-be3c-5eb930f5f766" />  
 
-## Memory = Home
-
-<img width="1286" height="863" alt="memory testers" src="https://github.com/user-attachments/assets/10ae4fe5-8b63-4fe1-ab94-d5d3e3efb092" />  
+## Memory is Home
 
 **Physical:**  
 Bitmap page allocator initialized from the bootloader's memory map.  
@@ -101,81 +99,86 @@ and modifying mappings in the current address space. `VMM_NOCACHE` supported for
 Chunked free list with block headers and immediate coalescing. `kmalloc, kfree, kzalloc, krealloc`, grows by `256KiB` chunks from the PMM.  
 Debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, and owner tagging.  
 
+<img width="1286" height="863" alt="memory testers" src="https://github.com/user-attachments/assets/10ae4fe5-8b63-4fe1-ab94-d5d3e3efb092" />  
 
-## Core: timer conversions
-`core/timer.h`, `core/timer.c`  
 
-Added overflow-safe millisecond→tick conversions with explicit rounding policy at every call site:  
+## 8259 PIC driver, Timer conversions
 
-- `ms_to_ticks_floor`, largest tick count ≤ `ms`
-- `ms_to_ticks_ceil`, smallest tick count ≥ `ms`
-- `ms_to_ticks_round`, nearest tick count
+- `core/timer.h`, `core/timer.c` added overflow-safe millisecond→tick conversions with explicit rounding policy at every call site.  
+  - `ms_to_ticks_floor`, largest tick count ≤ `ms`
+  - `ms_to_ticks_ceil`, smallest tick count ≥ `ms`
+  - `ms_to_ticks_round`, nearest tick count
+  - `timer_sleep_ms` and `timer_after` now use `_ceil`
+    ("at least this long" semantics both always wanted implicitly).  
 
-`timer_sleep_ms` and `timer_after` now use `_ceil` ("at least this long" semantics both always wanted implicitly).  
 All three saturate on overflow and treat `hz == 0` as "timer not initialized" (return 0).  
 
-## Core: environment device
-`core/env.c`, `core/env.h`, `core/mask.h`, `core/bus.c`  
 
-A bounded, fixed-capacity store of `(namespace, name) → value` entries, registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.  
+## Environment Storage, Bus Registry, Manifest and Device Discovery
+
+`core/env.c`, `core/env.h`, `core/mask.h`, `core/bus.c`:  
+
+<img width="898" height="454" alt="env" src="https://github.com/user-attachments/assets/375c2576-4679-4208-a55d-93ad811993b3" />  
+
+The environment device is a bounded, fixed-capacity store of `(namespace, name) → value` entries,  
+registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.  
 
 Per-entry policy:  
 - **access budget**: reclaimed synchronously when exhausted
-- **time budget (TTL)**: reclaimed asynchronously by a timer-driven sweeper (60,000 ticks at 1000 Hz is exactly 60 seconds or 1 minute)
+- **time budget (TTL)**: reclaimed asynchronously by a timer-driven sweeper.
+  (60,000 ticks at 1000 Hz is exactly 60 seconds or 1 minute)  
 - **importance**: eviction order under space pressure (rng: 0 = persistent - 10 = volatile)
 - **mask**: free-form classification bits, searchable via `list_by_mask` / `count_by_mask`
 
-`mask.h` defines the 32-bit field layout:  
+  `mask.h` defines the 32-bit field layout:  
+  
+  ```
+       31      24 23    20 19    16 15                 0
+      +----------+--------+--------+-------------------+
+      |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
+      | (8 bits) |(4 bits)|(4 bits)|    (16 bits)      |
+      +----------+--------+--------+-------------------+
+  ```
+  
+  `bus.c`'s `bus_publish_manifest()` catalogues the entire registry into `kernel.dev.<name>.*` under the env store.  
+  `fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
+  
+  > **Remark:**  
+  > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
+  > where only the owner of the object can modify this value or parameters, but you can `unset` (erase) them.  
 
-```
-     31      24 23    20 19    16 15                 0
-    +----------+--------+--------+-------------------+
-    |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
-    | (8 bits) |(4 bits)|(4 bits)|    (16 bits)      |
-    +----------+--------+--------+-------------------+
-```
+  **Overwrite policy:**  
 
-`bus.c`'s `bus_publish_manifest()` catalogues the entire registry into `kernel.dev.<name>.*` under the env store.  
-`fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
+  When a variable exists, the `env` performs a simple check:  
+  ```c
+      /* Overwrite protocol */
+      if (variable != NULL) {
+          uint32_t old_flags = env_mask_flags(existing->mask);
+          uint32_t old_owner = env_mask_owner(existing->mask);
+          uint32_t mask_arg = env_mask_owner(mask);
+      
+          /* PINNED: only the original owner may rewrite */
+          if ((old_flags & ENV_FLAG_PINNED) && old_owner != env_mask_owner(mask_arg))
+              return ENV_READONLY; 
+      
+          /* READONLY: one-shot-write, authentic values  */
+          if (old_flags & ENV_FLAG_READONLY)
+              return ENV_READONLY;
+      }
+  ```
 
-> **Remark:**  
-> `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
-> where only the owner of the object can modify this value or parameters, but you can `unset` (erase) them.  
+- `ext/env/env.c`, `ext/envtool/`: tweaked and refactored:  
+  - `env` command-line tool plus `envtool`, a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
 
-**Policy:**  
-When a variable exists, the `env` performs a simple check:  
-```c
-    /* Overwrite protocol */
-    if (variable != NULL) {
-        uint32_t old_flags = env_mask_flags(existing->mask);
-        uint32_t old_owner = env_mask_owner(existing->mask);
-        uint32_t mask_arg = env_mask_owner(mask);
-    
-        /* PINNED: only the original owner may rewrite */
-        if ((old_flags & ENV_FLAG_PINNED) && old_owner != env_mask_owner(mask_arg))
-            return ENV_READONLY; 
-    
-        /* READONLY: one-shot-write, authentic values  */
-        if (old_flags & ENV_FLAG_READONLY)
-            return ENV_READONLY;
-    }
-```
+- `tui.c` gained `tui_fetch_resolution()` and a CP437 charset for primitive panels; `envtool` uses both.  
 
 - `ext/fbcon/fbcon.c`: terminal uses kernel's `heap->kmalloc` pool.
 
 - `ext/memory/md.c`: memory dump tool, has safety-guards to scan memory up and down and not crash.
-  <img width="921" height="735" alt="memory dump" src="https://github.com/user-attachments/assets/85bc1942-5dee-456f-9bbb-9fbbaf8a04a0" />
+  
+  <img width="921" height="735" alt="memory dump" src="https://github.com/user-attachments/assets/85bc1942-5dee-456f-9bbb-9fbbaf8a04a0" />  
 
-
-## Shell Toolkits
-
-`ext/env/env.c`, `ext/envtool/`:  
-
-`env` command-line tool plus `envtool`, a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
-
-`tui.c` gained `tui_fetch_resolution()` and a CP437 charset for primitive panels; `envtool` uses both.  
-
-## Console: using custom fonts
+## fbcon extension with Custom fonts
 
 `ext/fbcon/`, `ext/assets/fonts.h`:  
 
@@ -189,8 +192,9 @@ Converted PSF glyphs from the Debian console fonts. Selectable families:
 - **Regional / Asian**, `Goha`, `arm`, `tis`, `tcvn`, `viscii`
 - **Accessibility**, `brl` (Braille)
 
-## Interpreter, stage 1
-`ext/tokenizer/`, `ext/proxy/`  
+## Interpreter, stage 1 (Planned, busy on...)
+
+`ext/tokenizer/`, `ext/proxy/`:  
 
 **`tokenizer`**  
 First stage of the interpreter, rrecognises data types `string`, `int`, `hex`;  
