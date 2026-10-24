@@ -100,7 +100,28 @@ Per-entry policy:
 `bus.c`'s `bus_publish_manifest()` catalogues the entire registry into `kernel.dev.<name>.*` under the env store.  
 `fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
 
-> **Known gap:** `FLAGS` bits (notably `READONLY`, `PINNED`) are defined and published but not yet enforced by the store.  
+> **Remark:**  
+> `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
+> where only the owner of the object can modify this value or parameters, but you can `unset` (erase) them.  
+
+**Policy:**  
+When a variable exists, the `env` performs a simple check:  
+```c
+    /* Overwrite protocol */
+    if (variable != NULL) {
+        uint32_t old_flags = env_mask_flags(existing->mask);
+        uint32_t old_owner = env_mask_owner(existing->mask);
+        uint32_t mask_arg = env_mask_owner(mask);
+    
+        /* PINNED: only the original owner may rewrite */
+        if ((old_flags & ENV_FLAG_PINNED) && old_owner != env_mask_owner(mask_arg))
+            return ENV_READONLY; 
+    
+        /* READONLY: one-shot-write, authentic values  */
+        if (old_flags & ENV_FLAG_READONLY)
+            return ENV_READONLY;
+    }
+```
 
 ## Shell toolkit
 
