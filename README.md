@@ -127,18 +127,17 @@ When a variable exists, the `env` performs a simple check:
     }
 ```
 
-## Shell toolkit
+## Shell Toolkits
 
-`ext/env/env.c`, `ext/envtool/`  
+`ext/env/env.c`, `ext/envtool/`:  
 
 `env` command-line tool plus `envtool`, a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
 
-<img width="836" height="429" alt="envtool" src="https://github.com/user-attachments/assets/c91cea1f-afd3-4cf0-9895-2e22ff042a4e" />
-
 `tui.c` gained `tui_fetch_resolution()` and a CP437 charset for primitive panels; `envtool` uses both.  
 
-## Console: custom fonts
-`ext/fbcon/`, `ext/assets/fonts.h`  
+## Console: using custom fonts
+
+`ext/fbcon/`, `ext/assets/fonts.h`:  
 
 Converted PSF glyphs from the Debian console fonts. Selectable families:  
 
