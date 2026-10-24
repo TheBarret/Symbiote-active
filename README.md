@@ -161,6 +161,57 @@ When a variable exists, the `env` performs a simple check:
     }
 ```
 
+- `ext/fbcon/fbcon.c`: terminal uses kernel's `heap->kmalloc` pool.
+
+- `ext/memory/md.c`: memory dump tool, has safety-guards to scan memory up and down and not crash.
+  ```
+      > md scan
+      Memory regions (index -> md <n> to dump):
+        idx  start              end                type                   size  readable
+        ---  ------------------ ------------------ ---------------- ---------- --------
+        [ 0] 0x0000000000001000 0x0000000000073000 boot-reclaim         456 KiB  yes
+        [ 1] 0x0000000000073000 0x000000000009f000 usable               176 KiB  yes
+        [ 2] 0x000000000009fc00 0x00000000000a0000 reserved               1 KiB  no
+        [ 3] 0x00000000000f0000 0x00000000000f5000 reserved              20 KiB  no
+        [ 4] 0x00000000000f5000 0x00000000000f6000 reserved-mapped        4 KiB  yes
+        [ 5] 0x00000000000f6000 0x0000000000100000 reserved              40 KiB  no
+        [ 6] 0x0000000000100000 0x000000000fbd9000 usable               250 MiB  yes
+        [ 7] 0x000000000fbd9000 0x000000000fbdd000 boot-reclaim          16 KiB  yes
+        [ 8] 0x000000000fbdd000 0x000000000fe0f000 kernel                 2 MiB  yes
+        [ 9] 0x000000000fe0f000 0x000000000ff48000 boot-reclaim           1 MiB  yes
+        [10] 0x000000000ff48000 0x000000000ff61000 usable               100 KiB  yes
+        [11] 0x000000000ff61000 0x000000000ffdf000 boot-reclaim         504 KiB  yes
+        [12] 0x000000000ffdf000 0x000000000ffe0000 reserved               4 KiB  no
+        [13] 0x000000000ffe0000 0x000000000ffe3000 reserved-mapped       12 KiB  yes
+        [14] 0x000000000ffe3000 0x0000000010000000 reserved             116 KiB  no
+        [15] 0x00000000b0000000 0x00000000c0000000 reserved             256 MiB  no
+        [16] 0x00000000fd000000 0x00000000fd3e8000 framebuffer            3 MiB  yes
+        [17] 0x00000000fed1c000 0x00000000fed20000 reserved              16 KiB  no
+        [18] 0x00000000fffc0000 0x0000000100000000 reserved             256 KiB  no
+        [19] 0x000000fd00000000 0x0000010000000000 reserved           12288 MiB  no
+
+        ...inspecting region 8 (using an arbitrary length)....
+
+        > md 8 16000
+        Region 8 (kernel)  phys 0xfbdd000 + 0x3e80  ->  va 0xffff80000fbe0e80  (256 bytes)
+        ffff80000fbe0e80  e2 4c 89 ee e8 b7 4f 00  00 85 c0 75 13 ba 03 00  |.L....O....u....|
+        ffff80000fbe0e90  00 00 4c 89 f6 4c 89 ff  e8 43 fd ff ff 0f 1f 00  |..L..L...C......|
+        ffff80000fbe0ea0  48 83 c3 01 49 3b 5f 08  72 b6 31 c0 48 83 c4 08  |H...I;_.r.1.H...|
+        ffff80000fbe0eb0  5b 41 5c 41 5d 41 5e 41  5f 5d c3 b8 fb ff ff ff  |[A\A]A^A_]......|
+        ffff80000fbe0ec0  eb ea b8 fa ff ff ff eb  e3 0f 1f 80 00 00 00 00  |................|
+        ffff80000fbe0ed0  55 48 89 e5 41 57 41 56  41 55 41 54 53 48 83 ec  |UH..AWAVAUATSH..|
+        ffff80000fbe0ee0  18 48 83 7f 08 00 48 89  75 c8 48 89 4d c0 0f 84  |.H....H.u.H.M...|
+        ffff80000fbe0ef0  9c 00 00 00 49 89 fe 49  89 d4 4d 89 c5 31 db eb  |....I..I..M..1..|
+        ffff80000fbe0f00  11 0f 1f 80 00 00 00 00  48 83 c3 01 49 3b 5e 08  |........H...I;^.|
+        ffff80000fbe0f10  73 7e 49 8b 16 48 8d 04  db 4c 8d 3c c2 41 80 7f  |s~I..H...L.<.A..|
+        ffff80000fbe0f20  40 00 74 e4 49 83 7f 28  00 74 11 49 8b 46 28 48  |@.t.I..(.t.I.F(H|
+        ffff80000fbe0f30  85 c0 74 08 ff 10 49 3b  47 28 73 cc 41 8b 47 18  |..t...I;G(s.A.G.|
+        ffff80000fbe0f40  4c 39 e0 75 c3 41 8b 47  1c 4c 39 e8 75 ba 49 8b  |L9.u.A.G.L9.u.I.|
+        ffff80000fbe0f50  3f 48 8b 75 c8 4c 89 e2  e8 e3 4e 00 00 85 c0 75  |?H.u.L....N....u|
+        ffff80000fbe0f60  a7 49 8b 7f 08 48 8b 75  c0 4c 89 ea e8 cf 4e 00  |.I...H.u.L....N.|
+        ffff80000fbe0f70  00 85 c0 75 93 48 83 c4  18 4c 89 f8 5b 41 5c 41  |...u.H...L..[A\A|
+  ```
+
 ## Shell Toolkits
 
 `ext/env/env.c`, `ext/envtool/`:  
