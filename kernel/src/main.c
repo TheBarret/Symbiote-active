@@ -76,5 +76,7 @@ void kmain(void) {
 
     /* launch shell */
     shell_run();
-    cpu_halt_forever();         /* shell_run should not return; avoid bare-metal fallthrough UB */
+
+    /* shouldn't happen but just in case, to avoid fallthroughs */
+    cpu_halt_forever();
 }
