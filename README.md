@@ -183,9 +183,9 @@ Per-entry policy:
       }
   ```
 
-- `bus.c` publishes `bus_publish_manifest()` (full catalog of the bus registry: `kernel.dev.<name>.*`).  
+- `bus.c` publishes full catalog of the bus registry: `kernel.dev.<name>.*`.  
 
-- `fbcon` publishes console `column, row, width, height`.  
+- `fbcon` publishes console `column, row, width, height`: `kernel.dev.console.*`.  
 
 - `tui.c` added `tui_fetch_resolution()` and `CP437` support.  
 
@@ -196,7 +196,7 @@ Per-entry policy:
 - `ext/memory/md.c`: memory dump tool, has safety-guards to scan memory up and down and not crash.
    <img width="417" height="301" alt="memory inspection" src="https://github.com/user-attachments/assets/aad5469c-2405-4897-b216-7ac0aba3be2d" />
 
-- `dev/timer.c`: publishes delta vectors `ticks, uptime_ms, hz`.
+- `dev/timer.c`: publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.  
 
 ## fbcon extension: PSF Glyph fonts
 
