@@ -200,7 +200,7 @@ Converted PSF glyphs from the Debian console fonts. Selectable families:
 `ext/tokenizer/`, `ext/proxy/`:  
 
 **`tokenizer`**  
-First stage of the interpreter, rrecognises data types `string`, `int`, `hex`;  
+First stage of the interpreter, recognises data types `string`, `int`, `hex`;  
 structures `symbolics`, `identifiers` (functions), and keywords (`use`, `let`, `while`, `if`, `else`).   
 
 **`proxy`**  
