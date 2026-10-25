@@ -1,12 +1,30 @@
 # Symbiote-active
 <img width="1024" height="559" alt="logo" src="https://github.com/user-attachments/assets/808c960e-6db9-469d-93ed-fd51f01e92cf" />  
 
-Continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
-**Current goal is to implement layers that accommodate a custom interpreter**  
+**0.1.1** continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
 
 **Acknowledgements**  
 Symbiote was developed with assistance from Claude (Anthropic), DeepSeek, and CursorAI, used for architectural review, code generation, and audit passes.  
 All code is reviewed and owned by the maintainer; the tools are collaborators, not authors.  
+
+## Core Identity: Monolithic Foundation
+
+- Single Address Space & Ring 0 Execution:  
+  Core subsystems (PMM, VMM, the kernel heap, drivers like console, keyboard, timer, and VFS) all execute directly in Ring 0 within the same address space.  
+
+- Zero-Overhead Inter-Subsystem Communication:  
+  Uses a static software bus (`bus.c`) where core modules register class-specific ops structs (console_ops, timer_ops, etc.),  
+  allowing direct, lock-free C function calls after initialization.  
+
+- Extension Architecture:  
+  Extensions are designed to be decoupled into self-contained extension modules initialized (`ext.c/cmd.c`) via priority-ordered boot waves.
+
+- Hybrid Architecture:  
+  A foundation has been created for a safe approach for `device` function calls, the idea of a Marshal Proxy Dispatcher came to be.  
+  (`proxy.c`, Idea inspired by Microsoft's [DotNet/MarshalByRefObject](https://learn.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject?view=net-10.0) ).  
+  Combined with a self-regulating environment variable store (`env.c`) that deploys a separation of privileges,  
+  A script interpreter never gets raw pointers, memory addresses, or hardware port access.  
+  It interacts with the kernel strictly through opaque integer handles, serialized byte payloads, and strict ownership masks (`mask.h`).   
 
 <img width="1286" height="863" alt="demo" src="https://github.com/user-attachments/assets/aa6693f2-d1ef-4855-a9ed-fe4eedee4c7b" />  
 
