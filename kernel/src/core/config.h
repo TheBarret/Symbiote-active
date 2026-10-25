@@ -46,6 +46,7 @@
 #define PIT_CH0   0x40
 #define PIT_CMD   0x43
 #define TIMER_MAX_TASKS 16          /* bus back-end */
+#define TIMER_PUBLISH_MS 250u       /* env back-end */
 
 /* Shell settings
  * Ref: src/core/shell.c
@@ -88,30 +89,23 @@
  */
 #define BUS_MAX_DEVICES 32
 
-/* Bus owner-ID table (hardcoded). Do not index this table with bus_class
- * values from bus.h (or vice versa), even when the numbers look aligned.
+/* Bus owner-ID table (hardcoded).
+ * Caution:
+ * Do not index this table with bus_class values from bus.h (or vice versa),
+ * even though these numbers look aligned, they serve different parellels (I agee, was a bad design).
+ *
  * Ref: src/core/bus.h
  * Ref: src/core/mask.h
  */
-#define BUS_KERN_ID             1u // default or fallback
-#define BUS_CONSOLE_ID          2u
+#define BUS_KERN_ID             0u // default or fallback
+#define BUS_CONSOLE_ID          1u
+#define BUS_KBD_ID              2u
 #define BUS_TIMER_ID            3u
 #define BUS_ENV_ID              4u
 #define BUS_VFS_ID              5u
 #define BUS_BUS_ID              6u
 #define BUS_INTPR               7u
 #define BUS_PROXY               8u
-
-_Static_assert(BUS_KERN_ID    <= 0xFF &&
-               BUS_CONSOLE_ID <= 0xFF &&
-               BUS_TIMER_ID   <= 0xFF &&
-               BUS_ENV_ID     <= 0xFF &&
-               BUS_VFS_ID     <= 0xFF &&
-               BUS_BUS_ID     <= 0xFF &&
-               BUS_INTPR      <= 0xFF &&
-               BUS_PROXY      <= 0xFF,
-               "owner IDs must fit mask OWNER field");
-
 
 /* Command dispatcher settings
  * Ref: src/core/cmd.c
@@ -133,13 +127,18 @@ _Static_assert(BUS_KERN_ID    <= 0xFF &&
 #define ENV_MASK_DEFAULT        0x0000
 
 /* fail at build */
-_Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "PMM_PAGE_SIZE must be a power of two");
-_Static_assert((VMM_PAGE_SIZE  & (VMM_PAGE_SIZE  - 1)) == 0, "VMM_PAGE_SIZE must be a power of two");
-_Static_assert((HEAP_ALIGN     & (HEAP_ALIGN     - 1)) == 0, "HEAP_ALIGN must be a power of two");
-_Static_assert(HEAP_ALIGN >= 8,                              "HEAP_ALIGN below 8 wastes header space");
-_Static_assert(HEAP_MIN_BLOCK_SIZE == HEAP_ALIGN,            "HEAP_MIN_BLOCK_SIZE must equal HEAP_ALIGN");
-_Static_assert(PMM_PAGE_SIZE == VMM_PAGE_SIZE,               "PMM and VMM must agree on page size");
-_Static_assert(TIMER_MAX_TASKS > 0,                          "TIMER_MAX_TASKS must be positive");
-_Static_assert(BUS_MAX_DEVICES > 0,                          "BUS_MAX_DEVICES must be positive");
+_Static_assert(BUS_KERN_ID    <= 0xFF && BUS_CONSOLE_ID <= 0xFF &&
+               BUS_TIMER_ID   <= 0xFF && BUS_ENV_ID     <= 0xFF &&
+               BUS_VFS_ID     <= 0xFF && BUS_BUS_ID     <= 0xFF &&
+               BUS_INTPR      <= 0xFF && BUS_PROXY      <= 0xFF,
+               "config.h: bus owner IDs must fit mask OWNER field");
+_Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "config.h: PMM_PAGE_SIZE must be a power of two");
+_Static_assert((VMM_PAGE_SIZE  & (VMM_PAGE_SIZE  - 1)) == 0, "config.h: VMM_PAGE_SIZE must be a power of two");
+_Static_assert((HEAP_ALIGN     & (HEAP_ALIGN     - 1)) == 0, "config.h: HEAP_ALIGN must be a power of two");
+_Static_assert(HEAP_ALIGN >= 8,                              "config.h: HEAP_ALIGN below 8 wastes header space");
+_Static_assert(HEAP_MIN_BLOCK_SIZE == HEAP_ALIGN,            "config.h: HEAP_MIN_BLOCK_SIZE must equal HEAP_ALIGN");
+_Static_assert(PMM_PAGE_SIZE == VMM_PAGE_SIZE,               "config.h: PMM and VMM must agree on page size");
+_Static_assert(TIMER_MAX_TASKS > 0,                          "config.h: TIMER_MAX_TASKS must be positive");
+_Static_assert(BUS_MAX_DEVICES > 0,                          "config.h: BUS_MAX_DEVICES must be positive");
 
 #endif
