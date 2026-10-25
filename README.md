@@ -178,7 +178,8 @@ Per-entry policy:
 
 - `ext/memory/md.c`: memory dump tool, has safety-guards to scan memory up and down and not crash.
   
-  <img width="921" height="735" alt="memory dump" src="https://github.com/user-attachments/assets/85bc1942-5dee-456f-9bbb-9fbbaf8a04a0" />  
+  <img width="817" height="709" alt="memory inspection" src="https://github.com/user-attachments/assets/aad5469c-2405-4897-b216-7ac0aba3be2d" />
+
 
 ## fbcon extension: PSF Glyph fonts
 
