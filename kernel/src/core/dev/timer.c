@@ -5,6 +5,8 @@
 #include <core/arch/cpu.h>
 #include <core/arch/isr.h>
 #include <core/dev/timer.h>
+#include <core/dev/env.h>
+#include <core/mask.h>
 #include <core/panic.h>
 #include <core/kprintf.h>
 #include <core/klog.h>
@@ -37,6 +39,11 @@ static bool in_drain = false;
 
 /* Forward declaration; defined at the bottom after the functions it points at. */
 static const struct timer_ops timer_bus_ops;
+
+/* env back-end */
+static int timer_publish_id = 0;
+static void timer_publish_snapshot(void); /* forward */
+static void timer_publish_task(void *arg); /* forward */
 
 /* Runs in IRQ context: count and nothing else. */
 static void timer_irq(void *ctx) {
@@ -73,10 +80,12 @@ void timer_init(uint32_t hz) {
         .version      = 1,
         .ops          = &timer_bus_ops,
         .private_data = NULL,
-        .owner_id     = 2,
+        .owner_id     = BUS_TIMER_ID,
     };
     bus_register(&dev);
     bus_test("timer");
+    /* env back-end */
+    timer_publish_id = timer_after(TIMER_PUBLISH_MS, timer_publish_task, NULL);
 }
 
 uint32_t timer_hz(void) {
@@ -281,3 +290,34 @@ static const struct timer_ops timer_bus_ops = {
     .after     = timer_after,
     .cancel    = timer_cancel,
 };
+
+/* env back-end */
+
+static void timer_publish_snapshot(void) {
+    const struct env_ops *env = bus_env();
+    if (env == NULL)
+        return;
+
+    const char *ns = "kernel.dev.timer";
+    char buf[32];
+
+    /* set mask */
+    uint32_t m_int = env_mask_build(BUS_TIMER_ID, ENV_TYPE_INT, ENV_FLAG_CACHEABLE, 0);
+
+    #define PUB_U(field, val) do {                                         \
+        ksnprintf(buf, sizeof buf, "%llu", (unsigned long long)(val));     \
+        (void)env->set(ns, (field), buf, 0, 0, ENV_IMPORTANCE_DEFAULT, m_int); \
+    } while (0)
+
+    PUB_U("ticks",      timer_ticks());
+    PUB_U("uptime_ms",  uptime_ms());
+    PUB_U("hz",         timer_hz());
+
+    #undef PUB_U
+}
+
+static void timer_publish_task(void *arg) {
+    (void)arg;
+    timer_publish_id = timer_after(TIMER_PUBLISH_MS, timer_publish_task, NULL);
+    timer_publish_snapshot();
+}
