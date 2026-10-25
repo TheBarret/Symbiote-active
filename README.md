@@ -145,10 +145,6 @@ Per-entry policy:
   > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
   > where only the owner of the object can modify this value or parameters, but you can `unset` (erase) them.  
 
-- `bus.c` added `bus_publish_manifest()`, this catalogues the bus registry: `kernel.dev.<name>.*` on the env store.  
-- `fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
-
-
   **Overwrite policy:**  
 
   When a variable exists, the `env` performs a simple check:  
@@ -168,6 +164,10 @@ Per-entry policy:
               return ENV_READONLY;
       }
   ```
+
+- `bus.c` added `bus_publish_manifest()`, this catalogues the bus registry: `kernel.dev.<name>.*` on the env store.  
+
+- `fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
 
 - `ext/env/env.c`, `ext/envtool/`: tweaked and refactored:  
   - `env` command-line tool plus `envtool`, a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
