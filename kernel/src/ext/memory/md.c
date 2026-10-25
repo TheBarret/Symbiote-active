@@ -9,24 +9,24 @@
 #include <core/ext.h>
 #include <core/kprintf.h>
 
-/*  Memory dump (md)
+/*  md - memory dump console tool
+ *  Modes:
+ *   md [scan]                         print the memory map as a menu of regions
+ *   md <n> [offset] [len]             dump from region <n> (indexed, cannot fault)
+ *   md addr <hex> [len]               dump from an explicit VA (validated)
+ *   md phys <hex> [len]               dump from an explicit physical address (HHDM-translated, validated)
  *
- * Two modes:
- *   md [scan]                      print the memory map as a menu of regions
- *   md <n> [offset] [len]          dump from region <n> (indexed, cannot fault)
- *   md addr <hex> [len]            dump from an explicit VA (validated)
- *   md phys <hex> [len]            dump from an explicit physical address (HHDM-translated, validated)
- *
- * The indexed form is the primary one: coordinates come from the memory map,
- * not from user-typed hex, so the common case cannot fault.
+ * The indexed form is the primary one:
+ * coordinates come from the memory map, not from user-typed hex, so the common case cannot fault.
  * The addr/phys forms are escape hatches for debugging specific addresses;
- * both validate through vmm_translate and refuse cleanly rather than panicking.
+ * both validate through vmm_translate and refuse cleanly rather than run an panic.
+ *
  */
 
-#define MD_DEFAULT_LEN   256u
-#define MD_MAX_LEN       4096u
+#define MD_DEFAULT_LEN    256u
+#define MD_MAX_LEN        4096u
 #define MD_BYTES_PER_ROW 16u
-#define MD_MAX_REGIONS   64u       /* sanity bound on the memmap walk */
+#define MD_MAX_REGIONS    64u       /* sanity bound on the memmap walk */
 
 /* Is this region type HHDM-covered (i.e. readable via md <n>)? */
 static bool region_is_readable(uint64_t type) {
@@ -47,16 +47,16 @@ static bool region_is_readable(uint64_t type) {
 /* Short type name for the scan table and for `md <n>` headers. */
 static const char *region_type_name(uint64_t type) {
     switch (type) {
-    case LIMINE_MEMMAP_USABLE:                  return "usable";
-    case LIMINE_MEMMAP_RESERVED:                return "reserved";
-    case LIMINE_MEMMAP_ACPI_RECLAIMABLE:        return "acpi-reclaim";
-    case LIMINE_MEMMAP_ACPI_NVS:                return "acpi-nvs";
-    case LIMINE_MEMMAP_BAD_MEMORY:              return "bad";
-    case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:  return "boot-reclaim";
-    case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:  return "kernel";
-    case LIMINE_MEMMAP_FRAMEBUFFER:             return "framebuffer";
-    case LIMINE_MEMMAP_RESERVED_MAPPED:         return "reserved-mapped";
-    default:                                    return "unknown";
+    case LIMINE_MEMMAP_USABLE:                 return "usable";
+    case LIMINE_MEMMAP_RESERVED:               return "reserved";
+    case LIMINE_MEMMAP_ACPI_RECLAIMABLE:       return "acpi-reclaim";
+    case LIMINE_MEMMAP_ACPI_NVS:               return "acpi-nvs";
+    case LIMINE_MEMMAP_BAD_MEMORY:             return "bad";
+    case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE: return "boot-reclaim";
+    case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES: return "kernel";
+    case LIMINE_MEMMAP_FRAMEBUFFER:            return "framebuffer";
+    case LIMINE_MEMMAP_RESERVED_MAPPED:        return "reserved-mapped";
+    default:                                   return "unknown";
     }
 }
 
@@ -98,9 +98,9 @@ static int md_scan(void) {
     }
 
     kprintf("Memory regions (index -> md <n> to dump):\n");
-    kprintf("  idx  %-18s %-18s %-16s %10s  %s\n",
+    kprintf("  idx   %-18s %-18s %-16s %10s   %s\n",
             "start", "end", "type", "size", "readable");
-    kprintf("  ---  ------------------ ------------------ ---------------- ---------- --------\n");
+    kprintf("  ---   ------------------ ------------------ ---------------- ---------- --------\n");
 
     size_t shown = 0;
     for (size_t i = 0; i < map->entry_count && shown < MD_MAX_REGIONS; i++) {
@@ -164,13 +164,10 @@ static int md_region(uint64_t idx, uint64_t offset, uint64_t len) {
     }
 
     uint64_t avail = e->length - offset;
+    if (len == 0) len = MD_DEFAULT_LEN;
     if (len > avail) len = avail;
     if (len > MD_MAX_LEN) len = MD_MAX_LEN;
-    if (len == 0) len = MD_DEFAULT_LEN < avail ? MD_DEFAULT_LEN : avail;
 
-    /* Physical -> HHDM alias. This is the whole point of the indexed form:
-     * the user picked a region, so the region tells us it is physical,
-     * and HHDM is how physical memory is reached. */
     uint64_t hhdm = boot_hhdm_offset();
     if (hhdm == 0) {
         kprintf("md: HHDM offset unavailable\n");
@@ -202,35 +199,36 @@ static int md_explicit(uint64_t addr, bool is_physical, uint64_t len) {
                 (unsigned long long)addr, (unsigned long long)va);
     }
 
-    /* Validate: vmm_translate is the only thing that knows whether a
-     * dereference will fault. Do it in one call per page we'd touch. */
     if (!vmm_ready()) {
         kprintf("md: vmm not ready; refusing to probe unmapped memory\n");
         return CMD_USAGE;
     }
-    if (vmm_translate(va) == 0) {
-        kprintf("md: 0x%llx is not mapped (vmm_translate returned 0)\n",
-                (unsigned long long)va);
-        kprintf("    try 'md scan' for the list of readable regions\n");
-        return CMD_USAGE;
-    }
 
-    /* A request that spans a page boundary could fault on the second page.
-     * Check every page we intend to touch, then clamp to the first hole. */
+    if (len == 0) len = MD_DEFAULT_LEN;
     if (len > MD_MAX_LEN) len = MD_MAX_LEN;
-    uint64_t pages = (len + VMM_PAGE_SIZE - 1) / VMM_PAGE_SIZE;
-    uint64_t safe_len = len;
-    for (uint64_t p = 1; p < pages; p++) {
-        uint64_t page_va = (va & ~((uint64_t)VMM_PAGE_SIZE - 1)) + p * VMM_PAGE_SIZE;
-        if (vmm_translate(page_va) == 0) {
-            safe_len = page_va - va;
-            kprintf("md: mapping ends at 0x%llx; dumping %llu bytes\n",
-                    (unsigned long long)page_va, (unsigned long long)safe_len);
+
+    /* Validate every page touched from start to end (fixes unaligned cross-page faults) */
+    uint64_t start_page = va & ~((uint64_t)VMM_PAGE_SIZE - 1);
+    uint64_t end_page   = (va + len - 1) & ~((uint64_t)VMM_PAGE_SIZE - 1);
+    uint64_t safe_len   = len;
+
+    for (uint64_t p_va = start_page; p_va <= end_page; p_va += VMM_PAGE_SIZE) {
+        if (vmm_translate(p_va) == 0) {
+            if (p_va == start_page) {
+                safe_len = 0;
+            } else {
+                safe_len = p_va - va;
+            }
+            kprintf("md: mapping ends at 0x%llx; clamping dump to %llu bytes\n",
+                    (unsigned long long)p_va, (unsigned long long)safe_len);
             break;
         }
     }
+
     if (safe_len == 0) {
-        kprintf("md: nothing to dump\n");
+        kprintf("md: 0x%llx is not mapped (vmm_translate returned 0)\n",
+                (unsigned long long)va);
+        kprintf("    try 'md scan' for the list of readable regions\n");
         return CMD_USAGE;
     }
 
@@ -238,16 +236,14 @@ static int md_explicit(uint64_t addr, bool is_physical, uint64_t len) {
     return CMD_OK;
 }
 
-/*  Argument parsing: the subcommands share no format, so parse by hand
- *  rather than overloading the spec. The spec is a permissive catch-all;
- *  each branch gives its own precise usage on error.  */
+/*  Argument parsing  */
 static int md_usage(void) {
     kprintf("usage:\n"
-            "  md                   show the region menu (same as 'md scan')\n"
-            "  md scan              show the region menu\n"
-            "  md <n> [off] [len]   dump from region <n> (indexed, safe)\n"
-            "  md addr <hex> [len]  dump from a virtual address (validated)\n"
-            "  md phys <hex> [len]  dump from a physical address (via HHDM, validated)\n"
+            "  md                    show the region menu (same as 'md scan')\n"
+            "  md scan               show the region menu\n"
+            "  md <n> [off] [len]    dump from region <n> (indexed, safe)\n"
+            "  md addr <hex> [len]   dump from a virtual address (validated)\n"
+            "  md phys <hex> [len]   dump from a physical address (via HHDM, validated)\n"
             "\n"
             "Defaults: len=%u, max len=%u. Try 'md scan' first.\n",
             (unsigned)MD_DEFAULT_LEN, (unsigned)MD_MAX_LEN);
@@ -284,8 +280,6 @@ static int cmd_memdump_fn(const struct cmd_args *a) {
     /* "md <n> [offset] [len]" -- the common case. */
     uint64_t idx = 0;
     if (!kstrtoull(sub, &idx)) {
-        /* Not a region index and not a known subcommand. If it looks like a
-         * hex address, suggest the addr form rather than silently failing. */
         kprintf("md: '%s' is not a region index or subcommand\n", sub);
         if (sub[0] == '0' && (sub[1] == 'x' || sub[1] == 'X'))
             kprintf("    did you mean 'md addr %s'?\n", sub);
