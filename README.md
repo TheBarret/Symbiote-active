@@ -23,7 +23,7 @@ All code is reviewed and owned by the maintainer; the tools are collaborators, n
   A foundation has been created for a safe approach for `device` function calls, the idea of a Marshal Proxy Dispatcher came to be.  
   (`proxy.c`, Idea inspired by Microsoft's [DotNet/MarshalByRefObject](https://learn.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject?view=net-10.0) ).  
   Combined with a self-regulating environment variable store (`env.c`) that deploys a separation of privileges,  
-  A script interpreter never gets raw pointers, memory addresses, or hardware port access.  
+  Scriptable objects and/or the (`SymScript` is planned) interpreter never gets raw pointers, memory addresses, or hardware port access.  
   It interacts with the kernel strictly through opaque integer handles, serialized byte payloads, and strict ownership masks (`mask.h`).   
 
 <img width="1286" height="863" alt="demo" src="https://github.com/user-attachments/assets/aa6693f2-d1ef-4855-a9ed-fe4eedee4c7b" />  
