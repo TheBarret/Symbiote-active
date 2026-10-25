@@ -41,7 +41,18 @@ First build fetches Limine and the freestanding headers, then compiles the kerne
 ```
 
 Build with `CPPFLAGS=-DSYM_MEMDEBUG` to enable `heap.c` header magic, poison, and owner tagging.  
-Build with `EXTENSIONS="hello"` (looks for `hello.c`) for a headless image with only the smoke-test extension.  
+Build with `EXTENSIONS="hello"` (recursive lookup) for a headless image with only the smoke-test extension.  
+
+**heap.c:**  
+```
+#ifdef SYM_MEMDEBUG
+  #define BLOCK_MAGIC     0xC0FFEE5Aull
+  #define POISON_FREE     0xDD
+  #define POISON_ALLOC    0xAA
+#else
+  #define BLOCK_MAGIC     0ull
+#endif
+```
 
 ## Project Files & Structure
 ```
