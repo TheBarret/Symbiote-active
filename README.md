@@ -1,7 +1,7 @@
 # Symbiote-active
 <img width="1024" height="559" alt="logo" src="https://github.com/user-attachments/assets/808c960e-6db9-469d-93ed-fd51f01e92cf" />  
 
-**0.1.1** continuation of the symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
+This is **0.1.1**, a continuation of the (alpha) symbiote kernel in an isolated repo, this version will be active and tweaked on a regular base.   
 
 **Acknowledgements**  
 Symbiote was developed with assistance from Claude (Anthropic), DeepSeek, and CursorAI, used for architectural review, code generation, and audit passes.  
