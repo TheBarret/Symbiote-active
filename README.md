@@ -20,14 +20,28 @@ All code is reviewed and owned by the maintainer; the tools are collaborators, n
   Extensions are designed to be decoupled into self-contained extension modules initialized (`ext.c/cmd.c`) via priority-ordered boot waves.  
 
 - Hybrid Architecture:  
-  A foundation has been created for a safe approach for `device` function calls,  
-  the idea of a Marshal Proxy Dispatcher came to be. (`proxy.c`, Idea inspired by Microsoft's [DotNet/MarshalByRefObject](https://learn.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject?view=net-10.0)).   
-  Combined with a self-regulating environment variable store (`env.c`) that deploys a separation of privileges,  
-  Scriptable objects and/or the (`SymScript` is planned) interpreter never gets raw pointers, memory addresses, or hardware port access.  
+  A foundation has been created for a script component that can safely hand-off `device` function calls,
+  and storage depositing for scripted tasks, combined with a self-regulating environment variable store (`env.c`) that deploys a separation of privileges,  
+  Scriptable objects and/or the (planned) interpreter never gets raw pointers, memory addresses, or hardware port access.  
   It interacts with the kernel strictly through opaque integer handles, serialized byte payloads, and strict ownership masks (`mask.h`).   
 
 <img width="1286" height="863" alt="demo" src="https://github.com/user-attachments/assets/aa6693f2-d1ef-4855-a9ed-fe4eedee4c7b" />  
 
+
+## Building
+
+Requires a recent **GCC or Clang, GNU Make, and xorriso**.  
+First build fetches Limine and the freestanding headers, then compiles the kernel and assembles a hybrid BIOS/UEFI ISO.  
+```
+  make                # build everything, produce symbiote-x86_64.iso
+  make run-bios       # boot under QEMU, BIOS path
+  make run            # boot under QEMU, UEFI path
+  make run-serial     # boot headless, serial console to the terminal
+  make -C kernel size # report kernel size
+```
+
+Build with `CPPFLAGS=-DSYM_MEMDEBUG` to enable heap header magic, poison, and owner tagging.  
+Build with `EXTENSIONS="hello"` (looks for `hello.c`) for a headless image with only the smoke-test extension.  
 
 ## Project Files & Structure
 ```
@@ -79,23 +93,7 @@ kernel/
           └── assets/                 # Static resources & embedded binary payloads
 
 ```
-
-## Building
-
-Requires a recent **GCC or Clang, GNU Make, and xorriso**.  
-First build fetches Limine and the freestanding headers, then compiles the kernel and assembles a hybrid BIOS/UEFI ISO.  
-```
-  make                # build everything, produce symbiote-x86_64.iso
-  make run-bios       # boot under QEMU, BIOS path
-  make run            # boot under QEMU, UEFI path
-  make run-serial     # boot headless, serial console to the terminal
-  make -C kernel size # report kernel size
-```
-
-Build with `CPPFLAGS=-DSYM_MEMDEBUG` to enable heap header magic, poison, and owner tagging.  
-Build with `EXTENSIONS="hello"` (looks for `hello.c`) for a headless image with only the smoke-test extension.  
-
-# Changelog 0.1.1
+---
 
 ## Boot & Core
 
@@ -121,6 +119,8 @@ Debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, and 
 
 <img width="1286" height="863" alt="memory testers" src="https://github.com/user-attachments/assets/10ae4fe5-8b63-4fe1-ab94-d5d3e3efb092" />  
 
+
+# Changelog 0.1.1
 
 ## 8259 PIC driver, Timer conversions
 
@@ -183,21 +183,20 @@ Per-entry policy:
       }
   ```
 
-- `bus.c` added `bus_publish_manifest()`, this catalogues the bus registry: `kernel.dev.<name>.*` on the env store.  
+- `bus.c` publishes `bus_publish_manifest()` (full catalog of the bus registry: `kernel.dev.<name>.*`).  
 
-- `fbcon` publishes its own `column, row, width, height`; `tui_fetch_resolution()` reads it back.  
+- `fbcon` publishes console `column, row, width, height`.  
 
-- `ext/env/env.c`, `ext/envtool/`: tweaked and refactored:  
-  - `env` command-line tool plus `envtool`, a CP437 TUI for browsing, inspecting, and stress-testing the environment store.  
+- `tui.c` added `tui_fetch_resolution()` and `CP437` support.  
 
-- `tui.c` gained `tui_fetch_resolution()` and a CP437 charset for primitive panels; `envtool` uses both.  
+- `ext/env/env.c`, `ext/envtool/`: `env` command-line tool, `envtool` inspection and stresser, added `CP437` support.  
 
 - `ext/fbcon/fbcon.c`: terminal uses kernel's `heap->kmalloc` pool.
 
 - `ext/memory/md.c`: memory dump tool, has safety-guards to scan memory up and down and not crash.
-  
-  <img width="817" height="709" alt="memory inspection" src="https://github.com/user-attachments/assets/aad5469c-2405-4897-b216-7ac0aba3be2d" />
+   <img width="417" height="301" alt="memory inspection" src="https://github.com/user-attachments/assets/aad5469c-2405-4897-b216-7ac0aba3be2d" />
 
+- `dev/timer.c`: publishes delta vectors `ticks, uptime_ms, hz`.
 
 ## fbcon extension: PSF Glyph fonts
 
