@@ -71,5 +71,4 @@ struct timer_ops {
 uint64_t ms_to_ticks_floor(uint64_t ms);
 uint64_t ms_to_ticks_ceil (uint64_t ms);
 uint64_t ms_to_ticks_round(uint64_t ms);
-
 #endif /* CORE_TIMER_H */
