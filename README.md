@@ -40,7 +40,7 @@ First build fetches Limine and the freestanding headers, then compiles the kerne
   make -C kernel size # report kernel size
 ```
 
-Build with `CPPFLAGS=-DSYM_MEMDEBUG` to enable heap header magic, poison, and owner tagging.  
+Build with `CPPFLAGS=-DSYM_MEMDEBUG` to enable `heap.c` header magic, poison, and owner tagging.  
 Build with `EXTENSIONS="hello"` (looks for `hello.c`) for a headless image with only the smoke-test extension.  
 
 ## Project Files & Structure
