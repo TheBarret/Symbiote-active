@@ -92,6 +92,7 @@ kernel/
       ├── lib/                        # Interior library
       │   ├── mem.h                   # Direct memory operation library
       │   └── string.h                # String manipulation library
+      ├── linker-scripts/             # build scripts, linkers, offset partitions
       └── ext/                        # Kernel extensions, drivers, and visual assets
           ├── fbcon/                  # Framebuffer Console extension (Flanterm backend)
           ├── proxy/                  # Bus extension module (provides funneled access to bus objects with guardrails, for featured interpreter)
