@@ -95,13 +95,13 @@ kernel/
       ├── linker-scripts/             # build scripts, linkers, offset partitions
       └── ext/                        # Kernel extensions, drivers, and visual assets
           ├── fbcon/                  # Framebuffer Console extension (Flanterm backend)
-          ├── proxy/                  # Bus extension module (provides funneled access to bus objects with guardrails, for featured interpreter)
+          ├── proxy/                  # Bus extension module (native safe bus call proxy service)
           ├── cpu/                    # Query cpuid information
           ├── system/                 # built-in system commands
           ├── memory/                 # Heap, memory inspect and testers
           ├── env/                    # Environment command-line tool
           ├── envtool/                # Environment inspect and testers
-          ├── tokenizer/              # Tokenizer library (provides tokenization for featured interpreter)
+          ├── tokenizer/              # Tokenizer library (native tokenization service)
           └── assets/                 # Static resources & embedded binary payloads
 
 ```
@@ -226,21 +226,11 @@ Converted PSF glyphs from the Debian console fonts. Selectable families:
 - **Regional / Asian**, `Goha`, `arm`, `tis`, `tcvn`, `viscii`
 - **Accessibility**, `brl` (Braille)
 
-## Interpreters
+## Proxy
 
-**planned**: 
-`Railcode` a custom designed interpreter for Symbiote, [open source](https://github.com/TheBarret/Railcode).
+`ext/proxy/`:  
 
-
-`ext/tokenizer/`, `ext/proxy/`:  
-
-**`tokenizer`**  
-First stage of the interpreter, recognises data types `string`, `int`, `hex`;  
-structures `symbolics`, `identifiers` (functions), and keywords (`use`, `let`, `while`, `if`, `else`).   
-
-**`proxy`**  
-A `MarshalByRefObject`-style safe-call layer over the bus.  
-
+An inspired design (`MarshalByRefObject`) that provides a safe-call layer over the bus.  
 Consumers lease a handle by name, call methods by opcode, and unbind:  
 ```c
       const struct proxy_ops *p = bus_proxy();
