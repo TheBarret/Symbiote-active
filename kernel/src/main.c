@@ -27,7 +27,6 @@
 #include <core/ext.h>       // Extension-module dispatcher
 #include <core/cmd.h>       // Command-line dispatcher
 #include <core/shell.h>     // Shell Manager (ref: cmd.h)
-#include <ext/proxy/proxy.h> // Bus proxy extension (featured interpreter)
 
 void kmain(void) {
     // Limine validation logic or hang forever
