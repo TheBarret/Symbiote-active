@@ -194,7 +194,22 @@ Per-entry policy:
 
 - `dev/env.c`: fixed `env_set` with a better overwrite-flags logic (memory leak).
 
-- `ext/script/decimal.c`: software based fixed-precision floating point library, works with `env_set`, `env_get` and `mask.h` (requires no cpu SSE/FPU).  
+## Software-based Decimals
+
+`ext/script/script.c`, `ext/script/decimal`: 
+
+Emulates floating-point arithmetic without touching CPU FPU or SSE operations by combining a signed integer payload  
+with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).  
+
+<img width="465" height="83" alt="dectest" src="https://github.com/user-attachments/assets/4fffc59a-5f4e-40a6-800e-f72403930ddc" />  
+
+
+<img width="491" height="290" alt="dectest" src="https://github.com/user-attachments/assets/181af70a-a5f8-44fa-b040-629b32f7a998" />  
+
+*decimal Pi testing*
+
+All calculations rely entirely on safe integer math (`int64_t/__int128`) with explicit overflow checks and dynamic rounding modes.  
+Usage is simply by calling `dec_set()` to store values with your target scale and signature configuration, and `dec_get()` to retrieve and decode them back.  
 
 ## fbcon extension: PSF Glyph fonts
 
@@ -214,7 +229,7 @@ Converted PSF glyphs from the Debian console fonts. Selectable families:
 
 `ext/proxy/`:  
 
-An inspired design (`MarshalByRefObject`) that provides a safe-call layer over the bus.  
+An inspired design (`MarshalByRefObject` by Microsoft) re-used to create the same safe-call site layer over the bus.  
 Consumers lease a handle by name, call methods by opcode, and unbind:  
 ```c
       const struct proxy_ops *p = bus_proxy();
