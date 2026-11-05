@@ -161,5 +161,5 @@ void bus_publish_manifest(void) {
         /* validate */
         if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
     }
-    klog_env("→ bus manifest published: kernel.dev.*\n");
+    //klog_env("→ bus manifest published: kernel.dev.*\n");
 }
