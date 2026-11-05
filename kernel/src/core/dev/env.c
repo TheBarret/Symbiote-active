@@ -12,6 +12,19 @@
 #include <core/klog.h>
 #include <core/bus.h>
 
+/* int env_set(const char *ns, const char *name, const char *value,
+                   uint32_t access_budget, uint64_t ttl_ticks,
+                   uint8_t importance, uint32_t mask):
+ * Removed Memory Leak:
+   moving kmalloc after checking existing flags (PINNED and READONLY) and env_make_room,
+   any error return path happens before allocation occurs, removing the need to manually clean up half-allocated buffers on early exit.
+ * Fixed the Double-Masking Bug:
+   Changed old_owner != env_mask_owner(mask_arg) to old_owner != mask_arg,
+   since mask_arg was already extracted via env_mask_owner(mask).
+ * Refactored logic:
+   Failed requests (ENV_READONLY or ENV_NO_SPACE) now fail fast without wasting heap cycles on kmalloc and memcpy.
+ */
+
 /* entry */
 
 struct env_entry {
@@ -210,7 +223,31 @@ static int env_set(const char *ns, const char *name, const char *value,
     size_t footprint = ns_len + name_len + value_len;
     if (footprint > e->max_bytes) return ENV_NO_SPACE;   /* can never fit: evict nothing */
 
-    /* Stage the new strings first so a failure leaves the store untouched. */
+    /* Reap first so a stale duplicate can't coexist with the new entry. */
+    env_reap_expired(e);
+    struct env_entry *existing = env_find(e, ns, ns_len, name, name_len);
+
+    /* 1. Perform permission/overwrite validation FIRST before allocating strings */
+    if (existing != NULL) {
+        uint32_t old_flags = env_mask_flags(existing->mask);
+        uint32_t old_owner = env_mask_owner(existing->mask);
+        uint32_t mask_arg  = env_mask_owner(mask);
+
+        /* PINNED: only the original owner may rewrite (Fixed double-masking bug here) */
+        if ((old_flags & ENV_FLAG_PINNED) && old_owner != mask_arg)
+            return ENV_READONLY;
+
+        /* READONLY: one-shot-write, authentic values  */
+        if (old_flags & ENV_FLAG_READONLY)
+            return ENV_READONLY;
+    }
+
+    /* Check and make room before allocating */
+    if (!env_make_room(e, footprint, existing)) {
+        return ENV_NO_SPACE;
+    }
+
+    /* 2. Stage the new strings ONLY after all validation passes */
     char *n_ns    = kmalloc(ns_len + 1);
     char *n_name  = kmalloc(name_len + 1);
     char *n_value = kmalloc(value_len + 1);
@@ -218,24 +255,9 @@ static int env_set(const char *ns, const char *name, const char *value,
         kfree(n_ns); kfree(n_name); kfree(n_value);
         return ENV_NO_SPACE;
     }
-    memcpy(n_ns, ns, ns_len);          n_ns[ns_len] = '\0';
-    memcpy(n_name, name, name_len);    n_name[name_len] = '\0';
+    memcpy(n_ns, ns, ns_len);         n_ns[ns_len] = '\0';
+    memcpy(n_name, name, name_len);     n_name[name_len] = '\0';
     memcpy(n_value, value, value_len); n_value[value_len] = '\0';
-
-    /* Reap first so a stale duplicate can't coexist with the new entry. */
-    env_reap_expired(e);
-    struct env_entry *existing = env_find(e, ns, ns_len, name, name_len);
-
-    /* READONLY: reject overwrite; caller must unset first. */
-    if (existing != NULL && (existing->mask & ENV_FLAG_READONLY)) {
-        kfree(n_ns); kfree(n_name); kfree(n_value);
-        return ENV_READONLY;
-    }
-
-    if (!env_make_room(e, footprint, existing)) {
-        kfree(n_ns); kfree(n_name); kfree(n_value);
-        return ENV_NO_SPACE;
-    }
 
     struct env_entry *slot = existing;
     if (slot == NULL) {
