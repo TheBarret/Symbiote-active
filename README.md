@@ -196,10 +196,11 @@ Per-entry policy:
 
 ## Software-based Decimals
 
-`ext/script/script.c`, `ext/script/decimal`: 
+`ext/script/script.c`, `ext/script/decimal`:  
 
-Emulates floating-point arithmetic without touching CPU FPU or SSE operations by combining a signed integer payload  
-with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).  
+Emulates floating-point arithmetic without touching CPU FPU or SSE operations,  
+by combining a signed integer payload with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).  
+
 
 <img width="465" height="83" alt="dectest" src="https://github.com/user-attachments/assets/4fffc59a-5f4e-40a6-800e-f72403930ddc" />  
 
@@ -209,7 +210,8 @@ with a fractional scale factor stored out-of-band in environment `mask.h` metada
 *decimal Pi testing*
 
 All calculations rely entirely on safe integer math (`int64_t/__int128`) with explicit overflow checks and dynamic rounding modes.  
-Usage is simply by calling `dec_set()` to store values with your target scale and signature configuration, and `dec_get()` to retrieve and decode them back.  
+Usage is simply by calling `dec_set()` to store values with your target scale and signature configuration,  
+and `dec_get()` to retrieve and decode them back.  
 
 ## fbcon extension: PSF Glyph fonts
 
