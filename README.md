@@ -194,6 +194,8 @@ Per-entry policy:
 
 - `dev/env.c`: fixed `env_set` with a better overwrite-flags logic (memory leak).
 
+- `ext/script/decimal.c`: a new augmented `Decimal` data type that works with the `env_set`, `env_get` and `mask.h` (requires no cpu SSE/FPU).  
+
 ## fbcon extension: PSF Glyph fonts
 
 `ext/fbcon/`, `ext/assets/fonts.h`:  
