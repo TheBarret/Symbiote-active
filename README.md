@@ -201,13 +201,9 @@ Per-entry policy:
 Emulates floating-point arithmetic without touching CPU FPU or SSE operations,  
 by combining a signed integer payload with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).  
 
+<img width="961" height="413" alt="image" src="https://github.com/user-attachments/assets/df2aac60-0588-4cdf-8ce4-3afa1fce9f34" />  
 
-<img width="465" height="83" alt="dectest" src="https://github.com/user-attachments/assets/4fffc59a-5f4e-40a6-800e-f72403930ddc" />  
 
-
-<img width="491" height="290" alt="dectest" src="https://github.com/user-attachments/assets/181af70a-a5f8-44fa-b040-629b32f7a998" />  
-
-*decimal Pi testing*
 
 All calculations rely entirely on safe integer math (`int64_t/__int128`) with explicit overflow checks and dynamic rounding modes.  
 Usage is simply by calling `dec_set()` to store values with your target scale and signature configuration,  
