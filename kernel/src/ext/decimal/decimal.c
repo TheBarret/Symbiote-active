@@ -3,7 +3,7 @@
  * to provide floating point arithmetic and operations.
  *
  * Numeric story end-to-end in C:
- *   - payload: integer, stored in env as hex string
+ *   - payload: integer, stored in env `ENV_TYPE_INT`
  *   - scale:   carried in mask PRIVATE[15:8]
  *   - rounding/flags in PRIVATE[7:4] / PRIVATE[3:0]
  *   - add/sub/compare align to max(scale); mul scale-adds; div rounds
