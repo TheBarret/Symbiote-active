@@ -175,26 +175,6 @@ Per-entry policy:
   > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
   > where only the owner of the object can modify this value or parameters, but you can `unset` (erase) them.  
 
-  **Overwrite policy:**  
-
-  When a variable exists, the `env` performs a simple check:  
-  ```c
-      /* Overwrite protocol */
-      if (variable != NULL) {
-          uint32_t old_flags = env_mask_flags(existing->mask);
-          uint32_t old_owner = env_mask_owner(existing->mask);
-          uint32_t mask_arg = env_mask_owner(mask);
-      
-          /* PINNED: only the original owner may rewrite */
-          if ((old_flags & ENV_FLAG_PINNED) && old_owner != env_mask_owner(mask_arg))
-              return ENV_READONLY; 
-      
-          /* READONLY: one-shot-write, authentic values  */
-          if (old_flags & ENV_FLAG_READONLY)
-              return ENV_READONLY;
-      }
-  ```
-
 - `bus.c` publishes full catalog of the bus registry: `kernel.dev.<name>.*`.  
 
 - `fbcon` publishes console `column, row, width, height`: `kernel.dev.console.*`.  
@@ -210,7 +190,9 @@ Per-entry policy:
 
 - `dev/keyboard.c`: publishes keystroke vectors `keystrokes, chars, dropped, scancode, ticks, modifiers, last_char`: `kernel.dev.keyboard.*`.  
   
-- `dev/timer.c`: publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.  
+- `dev/timer.c`: publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.
+
+- `dev/env.c`: fixed `env_set` with a better overwrite-flags logic (memory leak).
 
 ## fbcon extension: PSF Glyph fonts
 
