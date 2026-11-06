@@ -25,7 +25,7 @@ All code is reviewed and owned by the maintainer; the tools are collaborators, n
   Scriptable objects and/or the (planned) interpreter never gets raw pointers, memory addresses, or hardware port access.  
   It interacts with the kernel strictly through opaque integer handles, serialized byte payloads, and strict ownership masks (`mask.h`).   
 
-<img width="1286" height="863" alt="demo" src="https://github.com/user-attachments/assets/aa6693f2-d1ef-4855-a9ed-fe4eedee4c7b" />  
+<img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/42c5535a-f444-457f-a9b3-0cf5347532ce" />
 
 
 ## Building
