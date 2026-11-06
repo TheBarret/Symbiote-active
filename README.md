@@ -150,7 +150,8 @@ All three saturate on overflow and treat `hz == 0` as "timer not initialized" (r
 
 `core/env.c`, `core/env.h`, `core/mask.h`, `core/bus.c`:  
 
-<img width="898" height="454" alt="env" src="https://github.com/user-attachments/assets/375c2576-4679-4208-a55d-93ad811993b3" />  
+<img width="1286" height="863" alt="Screenshot_2026-11-06_23-04-0833" src="https://github.com/user-attachments/assets/e0183475-a18f-4b84-88ac-85c97c193578" />
+
 
 The environment device is a bounded, fixed-capacity store of `(namespace, name) → value` entries,  
 registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.  
