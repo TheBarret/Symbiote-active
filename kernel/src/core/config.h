@@ -104,7 +104,7 @@
 #define BUS_ENV_ID              4u
 #define BUS_VFS_ID              5u
 #define BUS_BUS_ID              6u
-#define BUS_INTPR               7u
+#define BUS_VM16                7u
 #define BUS_PROXY               8u
 
 /* Command dispatcher settings
@@ -130,7 +130,7 @@
 _Static_assert(BUS_KERN_ID    <= 0xFF && BUS_CONSOLE_ID <= 0xFF &&
                BUS_TIMER_ID   <= 0xFF && BUS_ENV_ID     <= 0xFF &&
                BUS_VFS_ID     <= 0xFF && BUS_BUS_ID     <= 0xFF &&
-               BUS_INTPR      <= 0xFF && BUS_PROXY      <= 0xFF,
+               BUS_VM16       <= 0xFF && BUS_PROXY      <= 0xFF,
                "config.h: bus owner IDs must fit mask OWNER field");
 _Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "config.h: PMM_PAGE_SIZE must be a power of two");
 _Static_assert((VMM_PAGE_SIZE  & (VMM_PAGE_SIZE  - 1)) == 0, "config.h: VMM_PAGE_SIZE must be a power of two");

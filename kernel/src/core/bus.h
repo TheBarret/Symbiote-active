@@ -50,8 +50,9 @@ enum bus_class {
     BUS_CLASS_ENV      = 3,   /* environment storage, env.c */
     BUS_CLASS_VFS      = 4,   /* virtual files ystems, vfs.c */
     BUS_CLASS_BUS      = 5,   /* bus interior, bus.c */
-    BUS_CLASS_INPR     = 6,   /* interpreter module */
+    BUS_CLASS_VM16     = 6,   /* vm16 module */
     BUS_CLASS_PROXY    = 7,   /* proxy module */
+    BUS_CLASS_KEYBOARD = 8,   /* kbd module */
 };
 
 struct bus_device {
