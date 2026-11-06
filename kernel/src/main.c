@@ -30,38 +30,25 @@
 
 void kmain(void) {
     // Limine validation logic or hang forever
-    if (!boot_protocol_ok()) {
-        cpu_halt_forever();
-    }
-
+    if (!boot_protocol_ok()) { cpu_halt_forever(); }
     /* essentials */
     serial_init();              // serial output (read-only)
     klog_init();                // kernel format logger
     bus_init();                 // load bus registry
-
     /* greeter */
     klog_info("Loading kernel: Symbiote %s-%s...\n", SYM_VERSION, SYM_VERSION_INFO);
-
-
     /* kernel modules start */
     console_init();             // console writer
-
     gdt_init();                 // CPU tables (no heap required)
     idt_init();
-
     pmm_init();                 // memory
     heap_init();                // memory
     vmm_init();                 // memory
-
     pic_init();                 // interrupts
     timer_init(TIMER_HZ);       // interrupts
     cpu_sti();                  // interrupts
-
     vfs_init();                 // filesystem
-
-    env_init(0,0);                 // environment (0 = default)
-
-    bus_settle();               // write device manifest to env
+    env_init(0,0);              // environment (0 = default)
 
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
@@ -69,6 +56,8 @@ void kmain(void) {
     /* stage two: extensions */
     ext_init_all();             // extensions
     cmd_selfcheck();            /* catch command-spec typos at boot, after ext registration */
+
+    bus_settle();               // write device manifest to env
 
     /* greeter */
     klog_info("Stage 2 complete (ext: %zu, sys: %zu)\n", ext_count(), cmd_count());
