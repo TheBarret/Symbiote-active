@@ -170,7 +170,21 @@ Per-entry policy:
       |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
       | (8 bits) |(4 bits)|(4 bits)|    (16 bits)      |
       +----------+--------+--------+-------------------+
-  ```  
+  ```
+  
+  **Types:**  
+  ```c
+    #define ENV_TYPE_NONE          0u   /* opaque blob, unset */
+    #define ENV_TYPE_STRING        1u   /* printable ANSI/ASCII/UTF-8 */
+    #define ENV_TYPE_INT           2u   /* decimal integer*/
+    #define ENV_TYPE_BOOL          3u   /* "0" or "1" */
+    #define ENV_TYPE_HEX           4u   /* hex formatted "0xABCDEF"*/
+    #define ENV_TYPE_PATH          5u   /* filesystem path*/
+    #define ENV_TYPE_ENUM          6u   /* one of a defined set*/
+    #define ENV_TYPE_STRUCT        7u   /* structured data*/
+    #define ENV_TYPE_BIN           8u   /* binary data*/
+  ```
+  
   > **Remark:**  
   > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
   > where only the owner of the object can modify this value or parameters, but you can `unset` (erase) them.  
