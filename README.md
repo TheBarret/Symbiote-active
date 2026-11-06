@@ -184,6 +184,14 @@ Per-entry policy:
     #define ENV_TYPE_STRUCT        7u   /* structured data*/
     #define ENV_TYPE_BIN           8u   /* binary data*/
   ```
+
+  **FLAGS**:  
+  ```c
+    #define ENV_FLAG_READONLY      (1u << 16)  /* policy: one-shot, no overwrites */
+    #define ENV_FLAG_SECRET        (1u << 17)  /* policy: hide from default listings */
+    #define ENV_FLAG_CACHEABLE     (1u << 18)  /* policy: safe to recompute */
+    #define ENV_FLAG_PINNED        (1u << 19)  /* policy: immune to space-pressure eviction */
+  ```
   
   > **Remark:**  
   > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot write's, with the exception for `PINNED`,  
