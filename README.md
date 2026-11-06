@@ -185,7 +185,7 @@ Per-entry policy:
     #define ENV_TYPE_BIN           8u   /* binary data*/
   ```
 
-  **FLAGS**:  
+  **Flags**:  
   ```c
     #define ENV_FLAG_READONLY      (1u << 16)  /* policy: one-shot, no overwrites */
     #define ENV_FLAG_SECRET        (1u << 17)  /* policy: hide from default listings */
