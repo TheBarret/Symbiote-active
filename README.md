@@ -194,16 +194,26 @@ Per-entry policy:
 
 - `dev/env.c`: fixed `env_set` with a better overwrite-flags logic (memory leak).
 
+- `ext/script/decimal.c`, `ext/script/vm16.c`: added software-decimals, LC-3-style 16-bit native VM.
+
 ## Software-based Decimals
 
-`ext/script/script.c`, `ext/script/decimal`:  
+`ext/script/decimal.c`, `ext/script/decimal.h`:  
 
 Emulates floating-point arithmetic without touching CPU FPU or SSE operations,  
 by combining a signed integer payload with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).  
 
-<img width="961" height="413" alt="image" src="https://github.com/user-attachments/assets/df2aac60-0588-4cdf-8ce4-3afa1fce9f34" />  
+<img width="461" height="213" alt="image" src="https://github.com/user-attachments/assets/df2aac60-0588-4cdf-8ce4-3afa1fce9f34" />  
 
-
+Decimal bit layout:  
+```c
+  #define DEC_P_SCALE(priv) (((priv) >> 8) & 0xFF)
+  #define DEC_P_ROUND(priv) (((priv) >> 4) & 0x0F)
+  #define DEC_P_FLAGS(priv) (((priv)) & 0x0F)
+  #define DEC_P_MAKE(s,r,f) ((((uint16_t)(s) & 0xFF) << 8) | \
+                             (((uint16_t)(r) & 0x0F) << 4) | \
+                              ((uint16_t)(f) & 0x0F))
+```
 
 All calculations rely entirely on safe integer math (`int64_t/__int128`) with explicit overflow checks and dynamic rounding modes.  
 Usage is simply by calling `dec_set()` to store values with your target scale and signature configuration,  
