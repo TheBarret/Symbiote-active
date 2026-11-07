@@ -5,15 +5,18 @@
 #include <stdint.h>
 
 /* Interrupt-driven PS/2 keyboard driver
- * - added LED sync
+ * - LED sync
  * - multi-byte prefix state machine
- * - extended release tracking */
+ * - extended release tracking
+ * - publishes state to the environment store (env-only; not on the proxy) */
 
-/* env-poller */
-#define KBD_LOCK_CAPS 0x01
-#define KBD_LOCK_NUM 0x02
+/* env-poller: live reads (thread context).
+ * These are the same values published to kernel.dev.keyboard.* on a timer;
+ * callers that cannot wait for the publish cycle can read them directly. */
+#define KBD_LOCK_CAPS   0x01
+#define KBD_LOCK_NUM    0x02
 #define KBD_LOCK_SCROLL 0x04
-uint8_t kbd_locks(void);
+uint8_t  kbd_locks(void);
 uint32_t kbd_dropped(void);
 
 /* key stroke/event */
@@ -50,9 +53,18 @@ enum kbd_key {
     KBD_KEY_PAUSE,
 };
 
+/* keyboard bus ops.
+ * deliberate lean exposure on any shared keystrokes.
+ */
+struct kbd_ops {
+    uint8_t  (*locks)(void);
+    uint32_t (*dropped)(void);
+};
+
 bool kbd_init(void);
 enum kbd_event kbd_poll(char *out);
 char kbd_getchar(void);
 enum kbd_event kbd_wait(char *out);
+
 
 #endif
