@@ -7,7 +7,9 @@ in deliberate symbiosis: the core provides safe, handle-based services; the exte
 
 This repository (0.1.1) is the active development line of the 0.1.0 (alpha) kernel, updated continuously.  
 
-<img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/42c5535a-f444-457f-a9b3-0cf5347532ce" />  
+<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/4b3e7883-53c5-46db-89c3-70f45de58d56" />  
+
+*early testing*  
 
 **Acknowledgements**  
 Symbiote was developed with assistance from Claude (Anthropic), DeepSeek, and CursorAI, used for architectural review, code generation, and audit passes.  
