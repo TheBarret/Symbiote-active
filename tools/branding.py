@@ -1,6 +1,6 @@
 from PIL import Image
 
-# Basic that converts PNG data into C-lang header.
+# Basic tool that converts PNG data into C-lang header.
 # version 1.0
 # Disclaimer: Made by Gemini
 
