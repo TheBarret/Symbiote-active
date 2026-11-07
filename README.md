@@ -141,7 +141,7 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 
 
 
-# Changelog 0.1.1
+# Active changes & log 0.1.1
 
 ## 8259 PIC driver, Timer conversions
 
