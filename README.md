@@ -230,6 +230,7 @@ Per-entry policy:
 Software-only decimal arithmetic, no FPU or SSE instructions anywhere in the path.  
 A signed integer payload is combined with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).
 
+<img width="984" height="497" alt="decimals" src="https://github.com/user-attachments/assets/cc779130-cd4d-4ab5-8b8e-e8c28ca5b623" />  
 
 
 Decimal bit layout:
