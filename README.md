@@ -15,8 +15,6 @@ All code is reviewed and owned by the maintainer; the tools are collaborators, n
 
 ## Core Identity: A Monolithic Foundation  
 
-<img width="472" height="286" alt="bootsequence" src="https://github.com/user-attachments/assets/9bc9ffed-7564-4407-be3c-5eb930f5f766" />  
-
 - **Single address space, Ring 0 execution.**  
 Core subsystems, PMM, VMM, kernel heap, and drivers for console, keyboard, timer, and VFS, all execute directly in Ring 0 within the same address space.
 - **Zero-overhead inter-subsystem communication.**  
