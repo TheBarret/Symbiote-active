@@ -1,4 +1,9 @@
 from PIL import Image
+
+# Basic that converts PNG data into C-lang header.
+# version 1.0
+# Disclaimer: Made by Gemini
+
 def convert_image_to_header(image_path, output_path, width=None, height=None):
     img = Image.open(image_path).convert("RGBA")
     if width and height:
