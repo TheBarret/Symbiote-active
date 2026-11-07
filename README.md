@@ -217,7 +217,11 @@ Per-entry policy:
 - `dev/keyboard.c` publishes keystroke vectors `keystrokes, chars, dropped, scancode, ticks, modifiers, last_char`: `kernel.dev.keyboard.*`.
 - `dev/timer.c` publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.
 - `dev/env.c`: fixed a memory leak in `env_set`'s overwrite-flag logic.
-- `ext/script/decimal.c`, `ext/script/vm16.c`: software-based decimals, and an LC-3-style 16-bit native VM.
+- `ext/script/decimal.c`, `ext/script/vm16.c`: software-based decimals, and started with a LC-3-style 16-bit native VM extension.
+
+- `dev/keyboard.c`, `dev/keyboard.h`: patched with new `bus_ops` initializer table, exposing `locks` and `drops` capabilities.
+- `ext/script/decimal.c`, `ext/script/decimal.h`: patched and cleaned up.
+- `ext/script/vm16.c`, `ext/script/vm16.h`: continuation of first LC-3 functions, has its own bus address and `bus_ops` capabilities.
 
 ## Software-based Decimals
 
