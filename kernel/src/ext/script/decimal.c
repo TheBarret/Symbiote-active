@@ -6,15 +6,31 @@
 #include <ext/script/decimal.h>
 
 /* Design
- * ------
- * Every operation is done in sign + magnitude form on unsigned 128-bit
- * integers, then rounded once, at the end, by round_div(). Magnitudes
- * (never signed values) are used so INT64_MIN needs no special case, and
- * no signed overflow or hardware trap (#DE) is reachable.
+ * Every operation is done in sign + magnitude form on unsigned 128-bit integers,
+ * then rounded once, at the end, by round_div().
+ * Magnitudes (never signed values) are used so INT64_MIN needs no special case,
+ * and no signed overflow or hardware trap (#DE) is reachable.
  *
- * 128-bit division is done in software (udivmod128) so the kernel does not
- * need libgcc's __udivti3/__umodti3. Shifts, compares, subtracts and
- * 64x64->128 multiplies are inlined by the compiler.
+ * 128-bit division is done in software (udivmod128) so the kernel does not need libgcc's __udivti3/__umodti3.
+ * Shifts, compares, subtracts and 64x64->128 multiplies are inlined by the compiler.
+ *
+ * Invariant of dec_div: a scaling overflow reject is never spurious. The divisor
+ * magnitude stays < 2^63, so if the scaled dividend no longer fits u128, the
+ * quotient is >= 2^128 / 2^63 = 2^65 and cannot fit int64 anyway. Rejection
+ * always means "unrepresentable result", never "representable but gave up".
+ *
+ * Environment symbols storage come with private headers:
+ *
+ * mask.h defines the 32-bit metadata field layout:
+ *
+ *       31       24 23    20 19    16 15                 0
+ *       +----------+--------+--------+-------------------+
+ *       |  OWNER   |  TYPE  | FLAGS  |     PRIVATE       |
+ *       | (8 bits) |(4 bits)|(4 bits)|    (16 bits)      |
+ *       +----------+--------+--------+--------+----------+
+ *       | IDENTITY:ENV_TYPE_INT      | SCALE|ROUND|FLAGS |  [DECIMAL.H]
+ *       +----------------------------+------+-----+------+
+ *
  */
 #if !defined(__SIZEOF_INT128__)
 #error "decimal.c requires __int128 (GCC/Clang, x86-64)"
@@ -30,13 +46,20 @@ typedef unsigned __int128 u128;
 /* n / d and n % d. d must be non-zero and < 2^127 (callers stay below 2^124). */
 static u128 udivmod128(u128 n, u128 d, u128 *rem)
 {
+    if (d == 1) {                                /* common: every upscale divides by 1 */
+        *rem = 0;
+        return n;
+    }
     if ((n >> 64) == 0 && (d >> 64) == 0) {      /* fast path: native 64-bit div */
         uint64_t n64 = (uint64_t)n, d64 = (uint64_t)d;
         *rem = (u128)(n64 % d64);
         return (u128)(n64 / d64);
     }
     u128 q = 0, r = 0;
-    for (int i = 127; i >= 0; i--) {
+    int i = 127;
+    while (i >= 0 && ((n >> i) & 1) == 0)        /* skip leading zeros: q's high bits are 0 */
+        i--;
+    for (; i >= 0; i--) {
         r = (r << 1) | ((n >> i) & 1);
         if (r >= d) {
             r -= d;
@@ -108,15 +131,15 @@ static bool scale_signed(bool neg, u128 mag, unsigned up, unsigned down,
     return round_div(mag, den, neg, rnd, out);
 }
 
-/* Rescale an int64 payload between scales, rounding only when digits drop. */
-static bool rescale_i64(int64_t x, uint8_t from, uint8_t to, enum dec_round rnd, int64_t *out)
+/* Rescale an int64 payload upward (to >= from). Exact by construction:
+ * digits are only ever appended, so there is no rounding to configure.
+ * False if the rescaled magnitude does not fit int64. */
+static bool upscale_i64(int64_t x, uint8_t from, uint8_t to, int64_t *out)
 {
-    if (from > DEC_MAX_SCALE || to > DEC_MAX_SCALE) return false;
+    if (from > DEC_MAX_SCALE || to > DEC_MAX_SCALE || to < from) return false;
     bool neg;
     u128 m = mag_of(x, &neg);
-    unsigned up   = to > from ? (unsigned)(to - from) : 0;
-    unsigned down = from > to ? (unsigned)(from - to) : 0;
-    return scale_signed(neg, m, up, down, rnd, out);
+    return scale_signed(neg, m, (unsigned)(to - from), 0, DEC_RND_TRUNC, out);
 }
 
 /* |d| rescaled up to `common` (>= d->scale), exactly, as u128. */
@@ -155,12 +178,15 @@ static bool build_ns(const char *ns, char *buf, size_t max_len)
     return true;
 }
 
-/* Canonical base-10 int64: optional '-', 1+ digits, nothing else. */
+/* Canonical base-10 int64: optional '-', 1+ digits, no leading zeros,
+ * no "-0", nothing else. Rejects "+5", "007", "-0", "1 ", "1x". */
 static bool parse_i64(const char *s, int64_t *out)
 {
     bool neg = false;
     if (*s == '-') { neg = true; s++; }
     if (*s == '\0') return false;
+    if (*s == '0' && s[1] != '\0') return false;   /* leading zeros ("00", "007") */
+    if (neg && *s == '0') return false;           /* "-0" (and "-0..." is covered above) */
 
     const uint64_t limit = neg ? ((uint64_t)1 << 63) : (uint64_t)INT64_MAX;
     uint64_t v = 0;
@@ -196,7 +222,11 @@ struct dec dec_get(const struct env_ops *e, const char *ns, const char *name)
     uint8_t scale  = (uint8_t)DEC_P_SCALE(priv);
     uint8_t round  = (uint8_t)DEC_P_ROUND(priv);
     uint8_t flags  = (uint8_t)DEC_P_FLAGS(priv);
-    if (scale > DEC_MAX_SCALE || !rnd_valid((enum dec_round)round)) return d;
+    if (scale > DEC_MAX_SCALE) return d;
+    if (!rnd_valid((enum dec_round)round)) return d;
+    /* Only DEC_F_SIGNED can be legitimately written by dec_set; anything
+     * else is a corrupt or foreign entry, so refuse to decode it. */
+    if (flags & ~(uint8_t)DEC_F_SIGNED) return d;
 
     /* 20 digits + sign + NUL = 22; anything longer is not an int64 anyway
      * and comes back as ENV_BUFFER_TOO_SMALL. */
@@ -228,7 +258,9 @@ bool dec_set(const struct env_ops *e, const char *ns, const char *name,
 
     if (final_scale > DEC_MAX_SCALE)                      return false;
     if (!rnd_valid((enum dec_round)final_round))          return false;
-    if (final_flags > 0x0F)                               return false;
+    /* DEC_F_SATURATE is not implemented: refuse to store behavior we cannot
+     * honor, rather than silently rounding as if it were strict overflow. */
+    if (final_flags & ~(uint8_t)DEC_F_SIGNED)              return false;
     if (importance > ENV_IMPORTANCE_MAX) importance = ENV_IMPORTANCE_MAX;
 
     char ns_buf[ENV_NAME_MAX + 1];
@@ -244,7 +276,11 @@ bool dec_set(const struct env_ops *e, const char *ns, const char *name,
     if (neg) buf[--i] = '-';
 
     /* No ENV_FLAG_CACHEABLE: a stored decimal is data, not something that can
-     * be recomputed, so it must not be offered up as cheap eviction fodder. */
+     * be recomputed, so it must not be offered up as cheap eviction fodder.
+     *
+     * Owner is always stamped BUS_VM16 (the decimal service's identity), even
+     * when this call arrives through the proxy; dec_get accepts both BUS_VM16
+     * and BUS_PROXY-owned entries, so the round trip is closed either way. */
     uint16_t priv = DEC_P_MAKE(final_scale, final_round, final_flags);
     uint32_t mask = env_mask_build(BUS_VM16, ENV_TYPE_INT, 0, priv);
 
@@ -260,8 +296,8 @@ bool dec_align(struct dec *a, struct dec *b, uint8_t *common)
 
     uint8_t s = (a->scale > b->scale) ? a->scale : b->scale;
     int64_t am, bm;
-    if (!rescale_i64(a->mag, a->scale, s, DEC_RND_TRUNC, &am)) return false;
-    if (!rescale_i64(b->mag, b->scale, s, DEC_RND_TRUNC, &bm)) return false;
+    if (!upscale_i64(a->mag, a->scale, s, &am)) return false;
+    if (!upscale_i64(b->mag, b->scale, s, &bm)) return false;
 
     a->mag = am; a->scale = s;
     b->mag = bm; b->scale = s;
@@ -333,7 +369,9 @@ struct dec dec_div(struct dec a, struct dec b, enum dec_round rnd, uint8_t resul
     if (!dec_valid(&a) || !dec_valid(&b) || result_scale > DEC_MAX_SCALE || !rnd_valid(rnd)) return r;
     if (b.mag == 0) return r;
 
-    /* (am/10^as) / (bm/10^bs) at scale rs  =  am * 10^(rs + bs - as) / bm */
+    /* (am/10^as) / (bm/10^bs) at scale rs  =  am * 10^(rs + bs - as) / bm
+     * The divisor stays < 2^63, so a 10^k scaling overflow on the dividend
+     * implies a quotient >= 2^65: rejection always means "does not fit". */
     int k = (int)result_scale + (int)b.scale - (int)a.scale;
     unsigned up   = k > 0 ? (unsigned)k  : 0;
     unsigned down = k < 0 ? (unsigned)-k : 0;
@@ -410,18 +448,28 @@ int dec_selftest(void)
     expect("div by zero",            dec_div(D(1,0),   D(0,0),  DEC_RND_TRUNC, 0), false, 0, 0);
     expect("div MIN/-1 (no #DE)",    dec_div(D(MINV,0), D(-1,0), DEC_RND_TRUNC, 0), false, 0, 0);
 
+    /* k = 36 frontier: the widest scale gap (rs + bs - as = 18 + 18 - 0).
+     * These pin the invariant that a scaling reject is always unrepresentable. */
+    expect("div k36 fits",           dec_div(D(80,0),  D(9000000000000000000LL,18), DEC_RND_TRUNC, 18),    true, 8888888888888888888LL, 18);
+    expect("div k36 half_up",        dec_div(D(80,0),  D(9000000000000000000LL,18), DEC_RND_HALF_UP, 18),  true, 8888888888888888889LL, 18);
+    expect("div k36 rejects unfit",  dec_div(D(341,0), D(1,18), DEC_RND_TRUNC, 18), false, 0, 0);
+
     expect("mul equal scale no rnd", dec_mul(D(15,1), D(10,1), DEC_RND_HALF_UP, 2), true, 150, 2);
     expect("mul scale up",           dec_mul(D(25,1), D(25,1), DEC_RND_TRUNC, 4), true, 62500, 4);
     expect("mul 6.25 -> 1 even",     dec_mul(D(25,1), D(25,1), DEC_RND_HALF_EVEN, 1), true, 62, 1);
     expect("mul 6.25 -> 1 half_up",  dec_mul(D(25,1), D(25,1), DEC_RND_HALF_UP, 1), true, 63, 1);
     expect("mul scale sum > 18",     dec_mul(D(1,18), D(1,18), DEC_RND_TRUNC, 18), true, 0, 18);
     expect("mul overflow",           dec_mul(D(INT64_MAX,0), D(2,0), DEC_RND_TRUNC, 0), false, 0, 0);
+    /* sqrt(2^63) frontier: 3037000499^2 fits, 3037000500^2 does not */
+    expect("mul sqrt frontier fits", dec_mul(D(3037000499LL,0), D(3037000499LL,0), DEC_RND_TRUNC, 0), true, 9223372030926249001LL, 0);
+    expect("mul sqrt frontier over",dec_mul(D(3037000500LL,0), D(3037000500LL,0), DEC_RND_TRUNC, 0), false, 0, 0);
 
     expect("add exact rs2",          dec_add(D(15,1), D(225,2), DEC_RND_TRUNC, 2), true, 375, 2);
     expect("add rs4 (scale up)",     dec_add(D(15,1), D(225,2), DEC_RND_TRUNC, 4), true, 37500, 4);
     expect("add 3.75 -> 1 even",     dec_add(D(15,1), D(225,2), DEC_RND_HALF_EVEN, 1), true, 38, 1);
     expect("sub 1 - 2.5",            dec_sub(D(1,0),  D(25,1),  DEC_RND_TRUNC, 1), true, -15, 1);
     expect("sub MIN - 1 overflow",   dec_sub(D(MINV,0), D(1,0), DEC_RND_TRUNC, 0), false, 0, 0);
+    expect("add MIN + 0",            dec_add(D(MINV,0), D(0,0), DEC_RND_TRUNC, 0), true, INT64_MIN, 0);
     expect("add cancels to zero",    dec_add(D(5,0),  D(-5,0),  DEC_RND_TRUNC, 0), true, 0, 0);
 
     expect("mod 7.5 % 2",            dec_mod(D(75,1), D(2,0),   DEC_RND_TRUNC, 1), true, 15, 1);
@@ -431,6 +479,19 @@ int dec_selftest(void)
 
     struct dec bad = D(1, 200);                    /* corrupt scale from a mask */
     expect("reject bad scale",       dec_add(bad, D(1,0), DEC_RND_TRUNC, 0), false, 0, 0);
+
+    /* dec_align must be atomic on failure: neither operand is modified. */
+    {
+        struct dec ax = D(15,1), bx = D(1,0);
+        bx.scale = 200;                            /* corrupt mask scale */
+        uint8_t common;
+        bool aligned = dec_align(&ax, &bx, &common);
+        if (aligned || ax.mag != 15 || ax.scale != 1 || bx.mag != 1) {
+            g_fail++;
+            kprintf("dec_selftest FAIL align atomicity: aligned=%d a.mag=%lld a.scale=%u\n",
+                    (int)aligned, (long long)ax.mag, (unsigned)ax.scale);
+        }
+    }
 
     kprintf("dec_selftest: %s (%d failures)\n", g_fail ? "FAILED" : "ok", g_fail);
     return g_fail;
