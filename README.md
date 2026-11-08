@@ -146,6 +146,27 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 <img width="1015" height="937" alt="image" src="https://github.com/user-attachments/assets/b7eed0fe-0ea7-47f2-bc46-135eb50c099e" />  
 
 
+- `bus.c` publishes the full catalog of the bus registry: `kernel.dev.<name>.*`.
+- `fbcon` publishes console `column, row, width, height`: `kernel.dev.console.*`.
+- `tui.c` gained `tui_fetch_resolution()` and `CP437` support.
+- `ext/env/env.c`, `ext/envtool/`: the `env` command-line tool, plus `envtool` inspection and stress testing, with `CP437` support.
+- `ext/fbcon/fbcon.c`: the terminal now uses the kernel's `heap->kmalloc` pool.
+- `ext/memory/md.c`: memory dump tool, safely scans memory in both directions without faulting.
+
+  
+- `dev/keyboard.c` publishes keystroke vectors `keystrokes, chars, dropped, scancode, ticks, modifiers, last_char`: `kernel.dev.keyboard.*`.
+- `dev/timer.c` publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.
+- `dev/env.c`: fixed a memory leak in `env_set`'s overwrite-flag logic.
+- `ext/script/decimal.c`, `ext/script/vm16.c`: software-based decimals, and started with a LC-3-style 16-bit native VM extension.
+
+- `dev/keyboard.c`, `dev/keyboard.h`: patched with new `bus_ops` initializer table, exposing `locks` and `drops` capabilities.
+- `ext/script/decimal.c`, `ext/script/decimal.h`: patched and cleaned up.
+- `ext/script/vm16.c`, `ext/script/vm16.h`: continuation of first LC-3 functions, has its own bus address and `bus_ops` capabilities.
+
+- `dev/keyboard.c`, `main.c`: fixed incorrect load order of the keyboard readiness (`bus_settle()` manifest missed it).
+
+- `ext/script/decimal.c`, `ext/script/test.c`, `ext/script/vm16.c`: added `DEC_CMP` operator, `vm16.c` can process basic `decimals`. added testers.
+
 ## 8259 PIC driver, Timer conversions
 
 - `core/timer.h`, `core/timer.c`: overflow-safe millisecond→tick conversions with an explicit rounding policy at every call site.
@@ -206,27 +227,6 @@ Per-entry policy:
 
 > **Remark:**  
 > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot writes, with one exception: for `PINNED`, only the owner of the object may modify this value or its parameters, though it can still be `unset` (erased).
-
-- `bus.c` publishes the full catalog of the bus registry: `kernel.dev.<name>.*`.
-- `fbcon` publishes console `column, row, width, height`: `kernel.dev.console.*`.
-- `tui.c` gained `tui_fetch_resolution()` and `CP437` support.
-- `ext/env/env.c`, `ext/envtool/`: the `env` command-line tool, plus `envtool` inspection and stress testing, with `CP437` support.
-- `ext/fbcon/fbcon.c`: the terminal now uses the kernel's `heap->kmalloc` pool.
-- `ext/memory/md.c`: memory dump tool, safely scans memory in both directions without faulting.
-
-  
-- `dev/keyboard.c` publishes keystroke vectors `keystrokes, chars, dropped, scancode, ticks, modifiers, last_char`: `kernel.dev.keyboard.*`.
-- `dev/timer.c` publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.
-- `dev/env.c`: fixed a memory leak in `env_set`'s overwrite-flag logic.
-- `ext/script/decimal.c`, `ext/script/vm16.c`: software-based decimals, and started with a LC-3-style 16-bit native VM extension.
-
-- `dev/keyboard.c`, `dev/keyboard.h`: patched with new `bus_ops` initializer table, exposing `locks` and `drops` capabilities.
-- `ext/script/decimal.c`, `ext/script/decimal.h`: patched and cleaned up.
-- `ext/script/vm16.c`, `ext/script/vm16.h`: continuation of first LC-3 functions, has its own bus address and `bus_ops` capabilities.
-
-- `dev/keyboard.c`, `main.c`: fixed incorrect load order of the keyboard readiness (`bus_settle()` manifest missed it).
-
-- `ext/script/decimal.c`, `ext/script/test.c`, `ext/script/vm16.c`: added `DEC_CMP` operator, `vm16.c` can process basic `decimals`. added testers.
 
 ## Software-based Decimals
 
