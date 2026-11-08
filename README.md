@@ -141,9 +141,10 @@ A chunked free list with block headers and immediate coalescing.
 `kmalloc`, `kfree`, `kzalloc`, `krealloc`, growing in `256 KiB` chunks from the PMM.  
 The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, and owner tagging.
 
-
-
 # Active changes & log 0.1.1
+
+<img width="1015" height="937" alt="image" src="https://github.com/user-attachments/assets/b7eed0fe-0ea7-47f2-bc46-135eb50c099e" />  
+
 
 ## 8259 PIC driver, Timer conversions
 
