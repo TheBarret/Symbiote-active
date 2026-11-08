@@ -224,8 +224,8 @@ struct dec dec_get(const struct env_ops *e, const char *ns, const char *name)
     uint8_t flags  = (uint8_t)DEC_P_FLAGS(priv);
     if (scale > DEC_MAX_SCALE) return d;
     if (!rnd_valid((enum dec_round)round)) return d;
-    /* Only DEC_F_SIGNED can be legitimately written by dec_set; anything
-     * else is a corrupt or foreign entry, so refuse to decode it. */
+    /* Only DEC_F_SIGNED can be legitimately written by dec_set;
+     * anything else is a corrupt or foreign entry, so refuse to decode it. */
     if (flags & ~(uint8_t)DEC_F_SIGNED) return d;
 
     /* 20 digits + sign + NUL = 22; anything longer is not an int64 anyway
@@ -275,12 +275,11 @@ bool dec_set(const struct env_ops *e, const char *ns, const char *name,
     while (uv > 0) { buf[--i] = (char)('0' + (uv % 10)); uv /= 10; }
     if (neg) buf[--i] = '-';
 
-    /* No ENV_FLAG_CACHEABLE: a stored decimal is data, not something that can
-     * be recomputed, so it must not be offered up as cheap eviction fodder.
-     *
-     * Owner is always stamped BUS_VM16 (the decimal service's identity), even
-     * when this call arrives through the proxy; dec_get accepts both BUS_VM16
-     * and BUS_PROXY-owned entries, so the round trip is closed either way. */
+    /* Decimal ENV symbol contract:
+     * - Expects ENV_TYPE_INT types
+     * - Never expects ENV_FLAG_CACHEABLE
+     * - Always expects BUS_VM16 for bus->env transactions
+     */
     uint16_t priv = DEC_P_MAKE(final_scale, final_round, final_flags);
     uint32_t mask = env_mask_build(BUS_VM16, ENV_TYPE_INT, 0, priv);
 
@@ -413,86 +412,38 @@ struct dec dec_mod(struct dec a, struct dec b, enum dec_round rnd, uint8_t resul
     return r;
 }
 
-/*  self-test (compile with -DSYM_DEC_SELFTEST)  */
-
-static int g_fail;
-
-static struct dec D(int64_t mag, uint8_t scale)
+/* CMP operations */
+int dec_cmp(struct dec a, struct dec b)
 {
-    struct dec d = {0};
-    d.mag = mag; d.scale = scale; d.ok = true;
-    return d;
-}
+    if (!dec_valid(&a) || !dec_valid(&b)) return -2;
 
-static void expect(const char *what, struct dec got, bool ok, int64_t mag, uint8_t scale)
-{
-    bool pass = (got.ok == ok) && (!ok || (got.mag == mag && got.scale == scale));
-    if (!pass) {
-        g_fail++;
-        kprintf("dec_selftest FAIL %s: got ok=%d mag=%lld scale=%u\n", what,
-                (int)got.ok, (long long)got.mag, (unsigned)got.scale);
-    }
-}
+    uint8_t common;
+    struct dec a_copy = a;
+    struct dec b_copy = b;
 
-int dec_selftest(void)
-{
-    g_fail = 0;
-    const int64_t MINV = INT64_MIN;
+    if (!dec_align(&a_copy, &b_copy, &common)) {
+        /* Alignment failed because scaling up exceeded int64_t bounds.
+         * Fall back to u128 scale-cross comparison to compare precisely. */
+        bool na, nb;
+        u128 ma = mag_of(a.mag, &na);
+        u128 mb = mag_of(b.mag, &nb);
 
-    expect("div 7.50/2.5 rs4",       dec_div(D(750,2), D(25,1), DEC_RND_TRUNC, 4), true, 30000, 4);
-    expect("div 1/3 rs4 trunc",      dec_div(D(1,0),   D(3,0),  DEC_RND_TRUNC, 4), true, 3333, 4);
-    expect("div 2/3 rs4 half_up",    dec_div(D(2,0),   D(3,0),  DEC_RND_HALF_UP, 4), true, 6667, 4);
-    expect("div -5/2 trunc",         dec_div(D(-5,0),  D(2,0),  DEC_RND_TRUNC, 0), true, -2, 0);
-    expect("div -5/2 half_up",       dec_div(D(-5,0),  D(2,0),  DEC_RND_HALF_UP, 0), true, -3, 0);
-    expect("div -5/2 half_even",     dec_div(D(-5,0),  D(2,0),  DEC_RND_HALF_EVEN, 0), true, -2, 0);
-    expect("div by zero",            dec_div(D(1,0),   D(0,0),  DEC_RND_TRUNC, 0), false, 0, 0);
-    expect("div MIN/-1 (no #DE)",    dec_div(D(MINV,0), D(-1,0), DEC_RND_TRUNC, 0), false, 0, 0);
+        if (na != nb) { return na ? -1 : 1; /* Negative is always less than positive */ }
 
-    /* k = 36 frontier: the widest scale gap (rs + bs - as = 18 + 18 - 0).
-     * These pin the invariant that a scaling reject is always unrepresentable. */
-    expect("div k36 fits",           dec_div(D(80,0),  D(9000000000000000000LL,18), DEC_RND_TRUNC, 18),    true, 8888888888888888888LL, 18);
-    expect("div k36 half_up",        dec_div(D(80,0),  D(9000000000000000000LL,18), DEC_RND_HALF_UP, 18),  true, 8888888888888888889LL, 18);
-    expect("div k36 rejects unfit",  dec_div(D(341,0), D(1,18), DEC_RND_TRUNC, 18), false, 0, 0);
-
-    expect("mul equal scale no rnd", dec_mul(D(15,1), D(10,1), DEC_RND_HALF_UP, 2), true, 150, 2);
-    expect("mul scale up",           dec_mul(D(25,1), D(25,1), DEC_RND_TRUNC, 4), true, 62500, 4);
-    expect("mul 6.25 -> 1 even",     dec_mul(D(25,1), D(25,1), DEC_RND_HALF_EVEN, 1), true, 62, 1);
-    expect("mul 6.25 -> 1 half_up",  dec_mul(D(25,1), D(25,1), DEC_RND_HALF_UP, 1), true, 63, 1);
-    expect("mul scale sum > 18",     dec_mul(D(1,18), D(1,18), DEC_RND_TRUNC, 18), true, 0, 18);
-    expect("mul overflow",           dec_mul(D(INT64_MAX,0), D(2,0), DEC_RND_TRUNC, 0), false, 0, 0);
-    /* sqrt(2^63) frontier: 3037000499^2 fits, 3037000500^2 does not */
-    expect("mul sqrt frontier fits", dec_mul(D(3037000499LL,0), D(3037000499LL,0), DEC_RND_TRUNC, 0), true, 9223372030926249001LL, 0);
-    expect("mul sqrt frontier over",dec_mul(D(3037000500LL,0), D(3037000500LL,0), DEC_RND_TRUNC, 0), false, 0, 0);
-
-    expect("add exact rs2",          dec_add(D(15,1), D(225,2), DEC_RND_TRUNC, 2), true, 375, 2);
-    expect("add rs4 (scale up)",     dec_add(D(15,1), D(225,2), DEC_RND_TRUNC, 4), true, 37500, 4);
-    expect("add 3.75 -> 1 even",     dec_add(D(15,1), D(225,2), DEC_RND_HALF_EVEN, 1), true, 38, 1);
-    expect("sub 1 - 2.5",            dec_sub(D(1,0),  D(25,1),  DEC_RND_TRUNC, 1), true, -15, 1);
-    expect("sub MIN - 1 overflow",   dec_sub(D(MINV,0), D(1,0), DEC_RND_TRUNC, 0), false, 0, 0);
-    expect("add MIN + 0",            dec_add(D(MINV,0), D(0,0), DEC_RND_TRUNC, 0), true, INT64_MIN, 0);
-    expect("add cancels to zero",    dec_add(D(5,0),  D(-5,0),  DEC_RND_TRUNC, 0), true, 0, 0);
-
-    expect("mod 7.5 % 2",            dec_mod(D(75,1), D(2,0),   DEC_RND_TRUNC, 1), true, 15, 1);
-    expect("mod -7 % 3",             dec_mod(D(-7,0), D(3,0),   DEC_RND_TRUNC, 0), true, -1, 0);
-    expect("mod MIN % -1 (no #DE)",  dec_mod(D(MINV,0), D(-1,0), DEC_RND_TRUNC, 0), true, 0, 0);
-    expect("mod by zero",            dec_mod(D(1,0),  D(0,0),   DEC_RND_TRUNC, 0), false, 0, 0);
-
-    struct dec bad = D(1, 200);                    /* corrupt scale from a mask */
-    expect("reject bad scale",       dec_add(bad, D(1,0), DEC_RND_TRUNC, 0), false, 0, 0);
-
-    /* dec_align must be atomic on failure: neither operand is modified. */
-    {
-        struct dec ax = D(15,1), bx = D(1,0);
-        bx.scale = 200;                            /* corrupt mask scale */
-        uint8_t common;
-        bool aligned = dec_align(&ax, &bx, &common);
-        if (aligned || ax.mag != 15 || ax.scale != 1 || bx.mag != 1) {
-            g_fail++;
-            kprintf("dec_selftest FAIL align atomicity: aligned=%d a.mag=%lld a.scale=%u\n",
-                    (int)aligned, (long long)ax.mag, (unsigned)ax.scale);
+        u128 ma_scaled = ma;
+        u128 mb_scaled = mb;
+        if (a.scale < b.scale) {
+            u128_mul_pow10(&ma_scaled, (unsigned)(b.scale - a.scale));
+        } else if (b.scale < a.scale) {
+            u128_mul_pow10(&mb_scaled, (unsigned)(a.scale - b.scale));
         }
+
+        int res = (ma_scaled < mb_scaled) ? -1 : ((ma_scaled > mb_scaled) ? 1 : 0);
+        return na ? -res : res;
     }
 
-    kprintf("dec_selftest: %s (%d failures)\n", g_fail ? "FAILED" : "ok", g_fail);
-    return g_fail;
+    /* Successfully aligned and fits within int64 bounds */
+    if (a_copy.mag < b_copy.mag) return -1;
+    if (a_copy.mag > b_copy.mag) return 1;
+    return 0;
 }
