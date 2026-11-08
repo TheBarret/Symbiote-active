@@ -4,28 +4,29 @@
 #include <core/arch/boot.h>
 #include <core/arch/heap.h>
 #include <core/dev/console.h>
-#include <core/dev/env.h>
 #include <core/kprintf.h>
 #include <core/klog.h>
 #include <core/bus.h>
 #include <core/ext.h>
-#include <core/mask.h>
+#include <core/config.h>
 #include <flanterm.h>
 #include <flanterm_backends/fb.h>
-
-/* debian PSF-console package */
-/* ref: https://packages.debian.org/sid/console-data */
 #include <ext/assets/fonts.h>
-
-/* Framebuffer console extension.
- * flanterm draws text (with a built-in font, scrolling and ANSI colours)
- * onto the framebuffer Limine gave us. Without this extension the image is headless,
- * and only the serial console exists. */
+#include <ext/fbcon/fbcon.h>
+#include <ext/fbcon/fbcon_brand.h>
+#include <ext/fbcon/fbcon_manifest.h>
 
 static struct flanterm_context *term;
+static struct limine_framebuffer *fb;
 
-/* flanterm behaves like a real terminal: '\n' only moves DOWN a line.
- * Our kprintf uses plain '\n' for "newline", so convert it to CR+LF here, just as the serial console does. */
+struct flanterm_context *fbcon_get_term(void) { return term; }
+struct limine_framebuffer *fbcon_get_fb(void)  { return fb;  }
+
+static uint32_t theme_bg = SYM_FBCON_BG;
+static uint32_t theme_fg = SYM_FBCON_FG;
+uint32_t fbcon_theme_bg(void) { return theme_bg; }
+uint32_t fbcon_theme_fg(void) { return theme_fg; }
+
 static void fbcon_write(const char *buf, size_t len) {
     size_t start = 0;
     for (size_t i = 0; i < len; i++) {
@@ -40,83 +41,35 @@ static void fbcon_write(const char *buf, size_t len) {
 
 static const struct console_ops fbcon_ops = { "fbcon", fbcon_write };
 
-/* Symbiote theme from config.h*/
-static uint32_t theme_bg = SYM_FBCON_BG;
-static uint32_t theme_fg = SYM_FBCON_FG;
-
-static int fbcon_init(void) {
-
-    struct limine_framebuffer *fb = boot_framebuffer();
-    if (fb == NULL)
-        return 1;           /* no framebuffer: stay headless */
-    if (fb->memory_model != LIMINE_FRAMEBUFFER_RGB || fb->bpp != 32)
-        return 2;           /* only 32-bit RGB is supported */
+static int fbcon_allocate(void) {
+    fb = boot_framebuffer();
+    if (fb == NULL) return 1;
+    if (fb->memory_model != LIMINE_FRAMEBUFFER_RGB || fb->bpp != 32) return 2;
 
     term = flanterm_fb_init(
-        //NULL, NULL,                         no allocator, flanterm uses its own pool
-        kmalloc, NULL,                        /* use our own heap, kfree never used */
+        kmalloc, NULL,
         fb->address, fb->width, fb->height, fb->pitch,
         fb->red_mask_size, fb->red_mask_shift,
         fb->green_mask_size, fb->green_mask_shift,
         fb->blue_mask_size, fb->blue_mask_shift,
-        NULL,                               /* no canvas */
-        NULL, NULL,                         /* default ANSI colours */
-        &theme_bg, &theme_fg,               /* default background / foreground */
-
-        /* Fonts */
-        /* NULL, NULL,                          default bright variants */
-        /* NULL, 0, 0, 1,                       built-in font */
-        /* 0, 0,                                auto-scale font to resolution */
-        /* 0,                                   margin */
-
+        NULL,
         NULL, NULL,
-        (void *)cp850_8x16_font,             /* Pointer to font array */
-        CP850_8X16_WIDTH,                    /* Width macro auto-defined by script (8) */
-        CP850_8X16_HEIGHT,                   /* Height macro auto-defined by script (16) */
-        1,                                    /* Font spacing */
-        0, 0,
-        0,
-
+        &theme_bg, &theme_fg,
+        NULL, NULL,
+        (void *)cp850_8x16_font, CP850_8X16_WIDTH, CP850_8X16_HEIGHT,
+        1, 0, 0, 0,
         FLANTERM_FB_ROTATE_0,
-        true);                              /* autoflush */
-    if (term == NULL)
-        return 3;
+        true);
+    if (term == NULL) return 3;
 
-    // pair up with console
-    console_register(&fbcon_ops);           /* replays the boot log */
+    console_register(&fbcon_ops);            /* replays the boot log */
 
-    // write framebuffer manifest
-    const struct env_ops *env = bus_env();
-    if (env != NULL) {
-        int ret_value;
-        char ns[64];
-        ksnprintf(ns, sizeof(ns), "kernel.dev.console");
-        uint32_t m = env_mask_build(1, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
+    fbcon_publish_manifest(fb, term);        /* env: kernel.dev.console.* */
+    fbcon_draw_logo(fb);                     /* branding overlay */
 
-        // Width/height vectors
-        char buf_width[16], buf_height[16];
-        ksnprintf(buf_width, sizeof(buf_width), "%zu", (size_t)fb->width);
-        ksnprintf(buf_height, sizeof(buf_height), "%zu", (size_t)fb->height);
-        ret_value = env->set(ns, "height", buf_height, 0, 0, 0, m);
-        if (ret_value != ENV_OK) { klog_warning("fbcon_init(env->set): exit code = %u", ret_value); }
-        ret_value = env->set(ns, "width", buf_width, 0, 0, 0, m);
-        if (ret_value != ENV_OK) { klog_warning("fbcon_init(env->set): exit code = %u", ret_value); }
-
-        // Column/row vectors
-        size_t cols = 0, rows = 0;
-        flanterm_get_dimensions(term, &cols, &rows);
-        char buf_cols[16], buf_rows[16];
-        ksnprintf(buf_cols, sizeof buf_cols, "%zu", cols);
-        ksnprintf(buf_rows, sizeof buf_rows, "%zu", rows);
-        ret_value = env->set(ns, "cols", buf_cols, 0, 0, 0, m);
-        if (ret_value != ENV_OK) { klog_warning("fbcon_init(env->set): exit code = %u", ret_value); }
-        ret_value = env->set(ns, "rows", buf_rows, 0, 0, 0, m);
-        if (ret_value != ENV_OK) { klog_warning("fbcon_init(env->set): exit code = %u", ret_value); }
-    }
-
-    // success
-    klog_env("→ console manifest published: kernel.dev.*\n");
     return 0;
 }
+
+static int fbcon_init(void) { return fbcon_allocate(); }
 
 SYM_EXTENSION(fbcon, fbcon_init, EXT_PRIO_CONSOLE);
