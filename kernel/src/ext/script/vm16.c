@@ -5,13 +5,15 @@
 #include <lib/string.h>
 #include <core/arch/heap.h>
 #include <core/version.h>
-#include <core/bus.h>
-#include <core/config.h>
 #include <core/ext.h>
+#include <core/cmd.h>
+#include <core/bus.h>
 #include <core/klog.h>
+#include <core/kprintf.h>
 
 #include <ext/script/decimal.h>
 #include <ext/script/vm16.h>
+#include <ext/script/test.h>
 
 /* LC-3 references disagree on whether LEA sets the condition codes.
  * 0 = LEA leaves FLAGS untouched (original behaviour of this file),
@@ -20,7 +22,7 @@
 #define VM_LEA_SETS_CC 0
 #endif
 
-/*  decode  */
+/*   decode   */
 
 enum opcode { OP_BR = 0, OP_ADD, OP_LD, OP_ST, OP_JSR, OP_AND, OP_LDR,
               OP_STR, OP_RTI, OP_NOT, OP_LDI, OP_STI, OP_JMP, OP_RES,
@@ -43,7 +45,7 @@ enum opcode { OP_BR = 0, OP_ADD, OP_LD, OP_ST, OP_JSR, OP_AND, OP_LDR,
 #define LONGP(i)  (((uint16_t)(i) >> 11) & 0x1)
 #define COND(i)   (((uint16_t)(i) >>  9) & 0x7)
 
-/*  helpers  */
+/*   helpers   */
 
 static inline uint16_t sext(uint16_t x, unsigned bits)
 {
@@ -52,8 +54,6 @@ static inline uint16_t sext(uint16_t x, unsigned bits)
     return x;
 }
 
-/* VM memory is exactly 64K words, so a 16-bit address can never be out of range.
- * If VM_MEMSIZE ever shrinks, these two helpers are the only place that needs a bounds check. */
 _Static_assert(VM_MEMSIZE == 0x10000u, "vm16: vrd/vwr assume a full 16-bit address space");
 
 static inline uint16_t vrd(const struct vm_ctx *c, uint16_t a)
@@ -68,9 +68,9 @@ static inline void vwr(struct vm_ctx *c, uint16_t a, uint16_t v)
 
 static inline void update_flags(struct vm_ctx *c, uint16_t r)
 {
-    if (c->reg[r] == 0)       c->reg[FLAGS] = FL_ZRO;
+    if (c->reg[r] == 0)         c->reg[FLAGS] = FL_ZRO;
     else if (c->reg[r] >> 15) c->reg[FLAGS] = FL_NEG;
-    else                      c->reg[FLAGS] = FL_POS;
+    else                        c->reg[FLAGS] = FL_POS;
 }
 
 static inline void vm_raise(struct vm_ctx *c, enum vm_fault f)
@@ -79,24 +79,128 @@ static inline void vm_raise(struct vm_ctx *c, enum vm_fault f)
     c->fault  = f;
 }
 
-/*  traps (stage 1: stub)  */
+/* Helper to read null-terminated ASCII strings packed into VM uint16_t words */
+static void read_vm_str(const struct vm_ctx *c, uint16_t addr, char *dest, size_t max_len)
+{
+    size_t n = 0;
+    for (size_t k = 0; (uint32_t)(addr + k) < VM_MEMSIZE && n < max_len - 1; k++) {
+        uint16_t w = vrd(c, addr + (uint16_t)k);
+        char c1 = (char)(w & 0xFF);
+        if (c1 == '\0') { dest[n++] = '\0'; break; }
+        dest[n++] = c1;
+        if (n >= max_len - 1) { dest[n] = '\0'; break; }
+        char c2 = (char)(w >> 8);
+        if (c2 == '\0') { dest[n++] = '\0'; break; }
+        dest[n++] = c2;
+    }
+    dest[max_len - 1] = '\0';
+}
 
-enum trap { T_GETC = 0x20, T_OUT, T_PUTS, T_IN, T_PUTSP, T_HALT };
+/*   traps   */
+
+enum standard_trap { T_GETC = 0x20, T_OUT, T_PUTS, T_IN, T_PUTSP, T_HALT };
+
+enum dec_trap {
+    T_DEC_GET  = 0xD0,
+    T_DEC_SET  = 0xD1,
+    T_DEC_ADD  = 0xD2,
+    T_DEC_SUB  = 0xD3,
+    T_DEC_MUL  = 0xD4,
+    T_DEC_DIV  = 0xD5,
+    T_DEC_MOD  = 0xD6,
+    T_DEC_CMP  = 0xD7,
+};
 
 static void trap(struct vm_ctx *c, uint16_t i)
 {
-    switch (TRAPV(i)) {
+    uint8_t vector = TRAPV(i);
+
+    switch (vector) {
     case T_HALT:
         c->status = VM_HALT;
         return;
+
+    case T_DEC_ADD:
+    case T_DEC_SUB:
+    case T_DEC_MUL:
+    case T_DEC_DIV:
+    case T_DEC_MOD:
+    case T_DEC_CMP: {
+        /* Convention:
+         * R0 = pointer to namespace string (or 0 for default)
+         * R1 = pointer to operand A name string
+         * R2 = pointer to operand B name string
+         * R3 = pointer to result name string (for store operations)
+         * R4 = result scale (low byte) and rounding mode (high byte)
+         */
+        char ns_buf[32] = {0};
+        char a_buf[32] = {0};
+        char b_buf[32] = {0};
+        char r_buf[32] = {0};
+
+        if (c->reg[R0] != 0) read_vm_str(c, c->reg[R0], ns_buf, sizeof(ns_buf));
+        read_vm_str(c, c->reg[R1], a_buf, sizeof(a_buf));
+        read_vm_str(c, c->reg[R2], b_buf, sizeof(b_buf));
+        if (vector != T_DEC_CMP) {
+            read_vm_str(c, c->reg[R3], r_buf, sizeof(r_buf));
+        }
+
+        const struct env_ops *env = bus_env();
+        if (env == NULL) {
+            vm_raise(c, VM_ERR_BADSTATE);
+            return;
+        }
+
+        struct dec op_a = dec_get(env, ns_buf[0] ? ns_buf : NULL, a_buf);
+        struct dec op_b = dec_get(env, ns_buf[0] ? ns_buf : NULL, b_buf);
+
+        uint8_t result_scale = (uint8_t)(c->reg[R4] & 0xFF);
+        enum dec_round rnd = (enum dec_round)((c->reg[R4] >> 8) & 0x0F);
+
+        if (vector == T_DEC_CMP) {
+            int cmp_res = dec_cmp(op_a, op_b);
+            if (cmp_res == -2) {
+                vm_raise(c, VM_ERR_BADSTATE);
+                return;
+            }
+            // Place comparison result in R0 (-1, 0, or 1) and set condition flags
+            c->reg[R0] = (uint16_t)(cmp_res < 0 ? 0xFFFF : cmp_res);
+            update_flags(c, R0);
+            return;
+        }
+
+        struct dec res = {0};
+        switch (vector) {
+        case T_DEC_ADD: res = dec_add(op_a, op_b, rnd, result_scale); break;
+        case T_DEC_SUB: res = dec_sub(op_a, op_b, rnd, result_scale); break;
+        case T_DEC_MUL: res = dec_mul(op_a, op_b, rnd, result_scale); break;
+        case T_DEC_DIV: res = dec_div(op_a, op_b, rnd, result_scale); break;
+        case T_DEC_MOD: res = dec_mod(op_a, op_b, rnd, result_scale); break;
+        default: break;
+        }
+
+        if (!res.ok) {
+            vm_raise(c, VM_ERR_BADSTATE);
+            return;
+        }
+
+        bool stored = dec_set(env, ns_buf[0] ? ns_buf : NULL, r_buf, res.mag, (int8_t)res.scale, NULL, 0);
+        if (!stored) {
+            vm_raise(c, VM_ERR_BADSTATE);
+            return;
+        }
+
+        c->reg[R0] = 0; /* Success indicator */
+        return;
+    }
+
     default:
-        /* Stage 2 will route these through bus_proxy(). not implemented. */
         vm_raise(c, VM_ERR_UNIMPL);
         return;
     }
 }
 
-/*  opcode bodies  */
+/*   opcode bodies   */
 
 static void br(struct vm_ctx *c, uint16_t i)
 {
@@ -126,7 +230,6 @@ static void st(struct vm_ctx *c, uint16_t i)
 
 static void jsr(struct vm_ctx *c, uint16_t i)
 {
-    /* Resolve the target BEFORE clobbering R7: JSRR R7 must jump to the old R7, not to the return address. */
     uint16_t target = LONGP(i)
         ? (uint16_t)(c->reg[PC] + sext((uint16_t)(i & 0x7FF), 11))
         : c->reg[SR1(i)];
@@ -157,7 +260,6 @@ static void str(struct vm_ctx *c, uint16_t i)
 static void rti(struct vm_ctx *c, uint16_t i)
 {
     (void)i;
-    /* No interrupts or privilege modes in stage 1. Fault loudly rather than silently NOP so broken programs are noticed. */
     vm_raise(c, VM_ERR_ILLEGAL);
 }
 
@@ -202,7 +304,7 @@ static void lea(struct vm_ctx *c, uint16_t i)
 #endif
 }
 
-/*  dispatch table  */
+/*   dispatch table   */
 
 typedef void (*op_fn)(struct vm_ctx *, uint16_t);
 
@@ -211,17 +313,12 @@ static const op_fn op_ex[VM_NOPS] = {
     rti, not_, ldi, sti, jmp, res, lea, trap
 };
 
-/*  public API  */
+/*   public API   */
 
 int vm_init(struct vm_ctx *c)
 {
     if (c == NULL) return -1;
 
-    /* The kernel heap is a boot invariant by the time extensions load.
-     * Do NOT call heap_init() here.
-     *
-     * kzalloc, not kmalloc: scripts must never observe stale kernel heap contents (pointers, env values),
-     * and zeroed memory makes program behaviour deterministic in both fast and SYM_MEMDEBUG builds. */
     c->mem = kzalloc(VM_MEMSIZE * sizeof(uint16_t));
     if (c->mem == NULL) return -1;
 
@@ -242,7 +339,6 @@ int vm_load_native(struct vm_ctx *c, uint32_t origin,
 {
     if (c == NULL || c->mem == NULL) return -1;
     if (nwords != 0 && image == NULL) return -1;
-    /* Written to be wrap-proof: no addition on attacker-sized values. */
     if (origin > VM_MEMSIZE || nwords > VM_MEMSIZE - origin) return -1;
     for (size_t k = 0; k < nwords; k++)
         c->mem[origin + k] = image[k];
@@ -254,7 +350,7 @@ int vm_load(struct vm_ctx *c, uint32_t origin,
 {
     if (c == NULL || c->mem == NULL) return -1;
     if (args_len != 0 && args == NULL) return -1;
-    if (args_len & 1u)                return -1;
+    if (args_len & 1u)               return -1;
     size_t nwords = args_len / 2;
     if (origin > VM_MEMSIZE || nwords > VM_MEMSIZE - origin) return -1;
     for (size_t k = 0; k < nwords; k++) {
@@ -268,22 +364,20 @@ enum vm_status vm_step(struct vm_ctx *c)
 {
     if (c == NULL) return VM_FAULT;
     if (c->mem == NULL) {
-        /* Latch the fault in the ctx so vm_run() terminates instead of spinning until fuel runs out. */
         vm_raise(c, VM_ERR_BADSTATE);
         c->fault_pc = c->reg[PC];
         return c->status;
     }
 
-    /* A halted/faulted ctx must not execute another instruction. */
     if (c->status != VM_OK) return c->status;
 
     uint16_t pc0   = c->reg[PC];
     uint16_t instr = vrd(c, pc0);
-    c->reg[PC]     = (uint16_t)(pc0 + 1u);       /* fetch + auto-advance */
+    c->reg[PC]     = (uint16_t)(pc0 + 1u);
 
     uint16_t op = OPC(instr);
-    if (op >= VM_NOPS) {                          /* unreachable with a 4-bit */
-        vm_raise(c, VM_ERR_ILLEGAL);              /* field; kept as a guard   */
+    if (op >= VM_NOPS) {
+        vm_raise(c, VM_ERR_ILLEGAL);
     } else {
         op_ex[op](c, instr);
     }
@@ -315,16 +409,12 @@ void vm_free(struct vm_ctx *c)
 {
     if (c == NULL) return;
     if (c->mem) {
-        /* SYM_MEMDEBUG poisons freed blocks; a stale c->mem read trips 0xDD. */
         kfree(c->mem);
         c->mem = NULL;
     }
-    /* HALT, not OK: a freed ctx must not look runnable. vm_init() resets it. */
     c->status = VM_HALT;
     c->fault  = VM_ERR_NONE;
 }
-
-/*  bus extension  */
 
 static const struct vm_ops g_vm_ops = {
     .init = vm_init,
@@ -350,4 +440,13 @@ int vm_ext_init(void)
     return 0;
 }
 
-//SYM_EXTENSION(script, vm_ext_init, EXT_PRIO_SERVICE);
+static int cmd_vm16_fn(const struct cmd_args *a) {
+    (void)a;
+    kprintf("Running vm16 selftesters...\n");
+    dec_selftest();
+    vm16_selftest();
+    vm16_decimal_integration_test();
+    return CMD_OK;
+}
+
+SYM_COMMAND(vm16test, "", "Run vm16 testers", cmd_vm16_fn);
