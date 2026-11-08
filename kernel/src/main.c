@@ -15,6 +15,7 @@
 #include <core/arch/heap.h>         // Block headers, Immediate coalescing, pmm_alloc_contig via HHDM
 
 /* kernel devices */
+#include <core/dev/keyboard.h>   // Keyboard device
 #include <core/dev/console.h>   // Console device, ps/2
 #include <core/dev/vfs.h>       // Virtual File System, ramfs
 #include <core/dev/timer.h>     // Clock controller
@@ -29,6 +30,7 @@
 #include <core/shell.h>     // Shell Manager (ref: cmd.h)
 
 void kmain(void) {
+    // ST1 ---------------------------------------------------------------------------
     // Limine validation logic or hang forever
     if (!boot_protocol_ok()) { cpu_halt_forever(); }
     /* essentials */
@@ -47,6 +49,13 @@ void kmain(void) {
     pic_init();                 // interrupts
     timer_init(TIMER_HZ);       // interrupts
     cpu_sti();                  // interrupts
+
+    // ST2 ---------------------------------------------------------------------------
+    if (!kbd_init()) {          // keyboard
+        klog_error("Error: no PS/2 keyboard detected!\n");
+        cpu_halt_forever();     // no keyboard, halt.
+    }
+
     vfs_init();                 // filesystem
     env_init(0,0);              // environment (0 = default)
 
@@ -59,6 +68,7 @@ void kmain(void) {
 
     bus_settle();               // write device manifest to env
 
+    // ST3 ---------------------------------------------------------------------------
     /* greeter */
     klog_info("Stage 2 complete (ext: %zu, sys: %zu)\n", ext_count(), cmd_count());
 
