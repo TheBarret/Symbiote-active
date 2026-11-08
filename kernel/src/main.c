@@ -51,13 +51,15 @@ void kmain(void) {
     cpu_sti();                  // interrupts
 
     // ST2 ---------------------------------------------------------------------------
+    env_init(0,0);              // environment must be first, (0 = default)
+
     if (!kbd_init()) {          // keyboard
         klog_error("Error: no PS/2 keyboard detected!\n");
         cpu_halt_forever();     // no keyboard, halt.
     }
 
     vfs_init();                 // filesystem
-    env_init(0,0);              // environment (0 = default)
+
 
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
