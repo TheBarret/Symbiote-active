@@ -37,7 +37,7 @@
 #define KBD_RESEND      0xFE
 #define KBD_SELFTEST_OK 0x55
 
-#define KBD_SPIN_LIMIT 100000
+#define KBD_SPIN_LIMIT 5000 /* 5000 - 10k cycles */
 
 #define KBD_RING_SIZE 256
 
@@ -174,6 +174,7 @@ static void update_leds(void) {
 }
 
 bool kbd_init(void) {
+    klog("→ keyboard_init()\n");
     drain();
     if (!write_command(CMD_DISABLE_KBD))
         return false;
