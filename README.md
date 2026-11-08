@@ -167,6 +167,10 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 
 - `ext/script/decimal.c`, `ext/script/test.c`, `ext/script/vm16.c`: added `DEC_CMP` operator, `vm16.c` can process basic `decimals`. added testers.
 
+- `ext/fbcon/fbcon.c` refactored, `Init → register → publish → brand`.
+- `ext/fbcon/fbcon_brand.c` added, draws top-right branding using `fbcon` (asset: `ext/assets/logo.h`).
+- `ext/fbcon/fbcon_manifest.c` added. publishes `fbcon` dimension fields on `env` store.
+
 ## 8259 PIC driver, Timer conversions
 
 - `core/timer.h`, `core/timer.c`: overflow-safe millisecond→tick conversions with an explicit rounding policy at every call site.
