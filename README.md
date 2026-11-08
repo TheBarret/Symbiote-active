@@ -226,6 +226,8 @@ Per-entry policy:
 
 - `dev/keyboard.c`, `main.c`: fixed incorrect load order of the keyboard readiness (`bus_settle()` manifest missed it).
 
+- `ext/script/decimal.c`, `ext/script/test.c`, `ext/script/vm16.c`: added `DEC_CMP` operator, `vm16.c` can process basic `decimals`. added testers.
+
 ## Software-based Decimals
 
 `ext/script/decimal.c`, `ext/script/decimal.h`:
