@@ -107,11 +107,11 @@ static void run_line(char *line) {
 /*  the loop  */
 
 void shell_run(void) {
-    if (!kbd_init()) {
-        kprintf("Error: no PS/2 keyboard detected!\n");
-        cpu_halt_forever();
-    }
-
+    // Moved to: main.c
+    //if (!kbd_init()) {
+    //    kprintf("Error: no PS/2 keyboard detected!\n");
+    //    cpu_halt_forever();
+    //}
     int problems = cmd_selfcheck();
     if (problems) {
         kprintf("[Warning] %d issues detected in look-up table.\n", problems);
