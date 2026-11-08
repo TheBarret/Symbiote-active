@@ -224,6 +224,8 @@ Per-entry policy:
 - `ext/script/decimal.c`, `ext/script/decimal.h`: patched and cleaned up.
 - `ext/script/vm16.c`, `ext/script/vm16.h`: continuation of first LC-3 functions, has its own bus address and `bus_ops` capabilities.
 
+- `dev/keyboard.c`, `main.c`: fixed incorrect load order of the keyboard readiness (`bus_settle()` manifest missed it).
+
 ## Software-based Decimals
 
 `ext/script/decimal.c`, `ext/script/decimal.h`:
