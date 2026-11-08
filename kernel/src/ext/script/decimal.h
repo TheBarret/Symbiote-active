@@ -95,6 +95,19 @@ struct dec dec_mul(struct dec a, struct dec b, enum dec_round rnd, uint8_t resul
 struct dec dec_div(struct dec a, struct dec b, enum dec_round rnd, uint8_t result_scale);
 struct dec dec_mod(struct dec a, struct dec b, enum dec_round rnd, uint8_t result_scale);
 
+/** CMP operations
+ * Returns:
+ *   -1 if a < b
+ *    0 if a == b
+ *    1 if a > b
+ *   -2 on error (e.g., !dec_valid(&a) || !dec_valid(&b))
+ */
+int dec_cmp(struct dec a, struct dec b);
+
+
+/* decimal round-trip test */
 int dec_selftest(void);
+
+
 
 #endif /* EXT_DEC_H */
