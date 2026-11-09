@@ -96,18 +96,19 @@ struct dec dec_div(struct dec a, struct dec b, enum dec_round rnd, uint8_t resul
 struct dec dec_mod(struct dec a, struct dec b, enum dec_round rnd, uint8_t result_scale);
 
 /** CMP operations
+ * Exact comparison across scales: operands are compared at a common scale.
  * Returns:
  *   -1 if a < b
  *    0 if a == b
  *    1 if a > b
- *   -2 on error (e.g., !dec_valid(&a) || !dec_valid(&b))
+ *   -2 on error (invalid operand: !dec_valid, or an internal rescale failure)
+ *
+ * Caller contract (VM/trap layer): -2 is a FAULT, not a comparison result.
+ * It must be distinguished from -1 and never mapped onto condition codes
+ * (N/Z/P); a failed compare must not branch as "less than".
+ * The int64 fast path is dec_align; when the rescale overflows int64 the
+ * exact u128 fallback decides, so dec_cmp succeeds where dec_align fails.
  */
 int dec_cmp(struct dec a, struct dec b);
-
-
-/* decimal round-trip test */
-int dec_selftest(void);
-
-
 
 #endif /* EXT_DEC_H */
