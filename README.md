@@ -178,6 +178,10 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 	* `vm16_decimal_fault_test()`
  	* `vm16_decimal_setget_test()`
 
+- `dev/env.c` added device-level aggregate bitmask (`active_mask_or`) within struct `env_device` to support `O(1)` short-circuit evaluation  
+   for mask-based queries (`env_list_by_mask` and `env_count_by_mask`), integrated automatic recalculation hooks into `env_set()` and `env_reclaim()`
+   to maintain bitfield synchronization without iterative overhead during read paths.
+
 ## In-depth: 8259 PIC driver, Timer conversions
 
 - `core/timer.h`, `core/timer.c`: overflow-safe millisecond→tick conversions with an explicit rounding policy at every call site.
