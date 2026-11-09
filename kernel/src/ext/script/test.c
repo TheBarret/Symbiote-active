@@ -215,3 +215,110 @@ int vm16_decimal_integration_test(void)
     kprintf("vm16_decimal_integration_test: PASSED\n");
     return 0;
 }
+/* Fault contract: a cmp against a symbol that was never stored must FAULT,
+ * not branch. Pins VM_ERR_DEC_GET and fault_pc. */
+int vm16_decimal_fault_test(void)
+{
+    struct vm_ctx ctx;
+    if (vm_init(&ctx) != 0) {
+        kprintf("vm_fault_test FAIL: init\n");
+        return 1;
+    }
+
+    load_vm_str(&ctx, 0x3500, "test");
+    load_vm_str(&ctx, 0x3510, "sum");
+    load_vm_str(&ctx, 0x3520, "zero");   /* never stored */
+
+    ctx.reg[R0] = 0x3500;
+    ctx.reg[R1] = 0x3510;
+    ctx.reg[R2] = 0x3520;
+    ctx.reg[R4] = 0x0002;
+
+    uint16_t program[] = { 0xF0D7, 0xF025 };   /* TRAP xD7, TRAP x25 */
+    if (vm_load_native(&ctx, VM_PC_START, program, 2) != 0) {
+        kprintf("vm_fault_test FAIL: load\n");
+        vm_free(&ctx);
+        return 1;
+    }
+
+    enum vm_status st = vm_run(&ctx, 100);
+    if (st != VM_FAULT || ctx.fault != VM_ERR_DEC_GET || ctx.fault_pc != VM_PC_START) {
+        kprintf("vm_fault_test FAIL: status=%d fault=%d fault_pc=%04X (want FAULT/DEC_GET/%04X)\n",
+                (int)st, (int)ctx.fault, (unsigned)ctx.fault_pc, (unsigned)VM_PC_START);
+        vm_free(&ctx);
+        return 1;
+    }
+
+    vm_free(&ctx);
+    kprintf("vm16_decimal_fault_test: PASSED\n");
+    return 0;
+}
+
+/* T_DEC_SET / T_DEC_GET round trip through the VM. */
+int vm16_decimal_setget_test(void)
+{
+    struct vm_ctx ctx;
+    if (vm_init(&ctx) != 0) {
+        kprintf("vm_setget_test FAIL: init\n");
+        return 1;
+    }
+    const struct env_ops *env = bus_env();
+    if (env == NULL) {
+        kprintf("vm_setget_test FAIL: no env\n");
+        vm_free(&ctx);
+        return 1;
+    }
+
+    load_vm_str(&ctx, 0x3500, "test");
+    load_vm_str(&ctx, 0x3510, "grav");
+    /* value: 9876 at 0x3600, LE across 4 words (9876 = 0x2694) */
+    ctx.mem[0x3600] = 0x2694;
+    ctx.mem[0x3601] = 0x0000;
+    ctx.mem[0x3602] = 0x0000;
+    ctx.mem[0x3603] = 0x0000;
+
+    /* SET: ns, name, value ptr, scale 3 / round HALF_EVEN(2) -> R4 = 0x0203 */
+    ctx.reg[R0] = 0x3500;
+    ctx.reg[R1] = 0x3510;
+    ctx.reg[R2] = 0x3600;
+    ctx.reg[R4] = 0x0203;
+
+    uint16_t program[] = { 0xF0D1, 0xF0D0, 0xF025 };   /* SET, GET, HALT */
+    if (vm_load_native(&ctx, VM_PC_START, program, 3) != 0) {
+        kprintf("vm_setget_test FAIL: load\n");
+        vm_free(&ctx);
+        return 1;
+    }
+    if (vm_run(&ctx, 100) != VM_HALT) {
+        kprintf("vm_setget_test FAIL: run\n");
+        vm_free(&ctx);
+        return 1;
+    }
+
+    /* GET wrote back to the same buffer at 0x3600; metadata in R3 */
+    int64_t mag = (int64_t)(  (uint64_t)ctx.mem[0x3600]
+                            | ((uint64_t)ctx.mem[0x3601] << 16)
+                            | ((uint64_t)ctx.mem[0x3602] << 32)
+                            | ((uint64_t)ctx.mem[0x3603] << 48));
+    uint16_t meta = ctx.reg[R3];
+    if (mag != 9876 || ctx.reg[R2] != 0x3600
+        || (meta >> 8) != 3 || ((meta >> 4) & 0xF) != DEC_RND_HALF_EVEN
+        || (meta & 0xF) != DEC_F_SIGNED) {
+        kprintf("vm_setget_test FAIL: mag=%lld meta=%04X\n", (long long)mag, (unsigned)meta);
+        vm_free(&ctx);
+        return 1;
+    }
+
+    /* and it really landed in env, scale 3 */
+    struct dec d = dec_get(env, "test", "grav");
+    if (!d.ok || d.mag != 9876 || d.scale != 3) {
+        kprintf("vm_setget_test FAIL: env mag=%lld scale=%u\n",
+                (long long)d.mag, (unsigned)d.scale);
+        vm_free(&ctx);
+        return 1;
+    }
+
+    vm_free(&ctx);
+    kprintf("vm16_decimal_setget_test: PASSED\n");
+    return 0;
+}
