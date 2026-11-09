@@ -12,37 +12,23 @@
 #include <core/klog.h>
 #include <core/bus.h>
 
-/* int env_set(const char *ns, const char *name, const char *value,
-                   uint32_t access_budget, uint64_t ttl_ticks,
-                   uint8_t importance, uint32_t mask):
- * Removed Memory Leak:
-   moving kmalloc after checking existing flags (PINNED and READONLY) and env_make_room,
-   any error return path happens before allocation occurs, removing the need to manually clean up half-allocated buffers on early exit.
- * Fixed the Double-Masking Bug:
-   Changed old_owner != env_mask_owner(mask_arg) to old_owner != mask_arg,
-   since mask_arg was already extracted via env_mask_owner(mask).
- * Refactored logic:
-   Failed requests (ENV_READONLY or ENV_NO_SPACE) now fail fast without wasting heap cycles on kmalloc and memcpy.
- */
-
 /* entry */
-
 struct env_entry {
-    char        *ns;            /* owned; NULL when slot is free */
-    char        *name;          /* owned */
-    char        *value;         /* owned */
+    char         *ns;           /* owned; NULL when slot is free */
+    char         *name;         /* owned */
+    char         *value;        /* owned */
 
-    uint32_t    ns_len;
-    uint32_t    name_len;
-    uint32_t    value_len;
+    uint32_t     ns_len;
+    uint32_t     name_len;
+    uint32_t     value_len;
 
-    uint32_t    access_remaining;   /* 0 = unlimited */
-    uint64_t    expires_at;         /* ticks; 0 = no time budget */
-    uint64_t    last_access;        /* ticks at last read or write */
-    uint8_t     importance;         /* higher = more valuable */
-    uint32_t    mask;               /* opaque, caller-defined classification bits */
+    uint32_t     access_remaining;   /* 0 = unlimited */
+    uint64_t     expires_at;         /* ticks; 0 = no time budget */
+    uint64_t     last_access;        /* ticks at last read or write */
+    uint8_t      importance;         /* higher = more valuable */
+    uint32_t     mask;               /* opaque, caller-defined classification bits */
 
-    bool        live;
+    bool         live;
 };
 
 enum env_reclaim_reason {
@@ -53,17 +39,18 @@ enum env_reclaim_reason {
 };
 
 /* device state */
-
 struct env_device {
     struct env_entry *entries;
-    size_t             capacity;         /* number of slots */
-    size_t             count;            /* live entries */
-    size_t             used_bytes;       /* sum of ns_len + name_len + value_len */
-    size_t             max_bytes;
+    size_t               capacity;           /* number of slots */
+    size_t               count;              /* live entries */
+    size_t               used_bytes;         /* sum of ns_len + name_len + value_len */
+    size_t               max_bytes;
 
-    const struct timer_ops *timer;       /* NULL if no timer device */
-    int                sweep_id;         /* timer task id, or -1 */
-    size_t             sweep_pos;        /* sweeper resume cursor (slot index) */
+    uint32_t             active_mask_or;     /* OPTIMIZATION: Aggregate OR mask of all live entries */
+
+    const struct timer_ops *timer;        /* NULL if no timer device */
+    int                  sweep_id;          /* timer task id, or -1 */
+    size_t               sweep_pos;         /* sweeper resume cursor (slot index) */
 
     uint64_t n_set;
     uint64_t n_get;
@@ -79,11 +66,22 @@ struct env_device {
 static struct env_device *g_env;
 
 /* forward decls */
-
 static void env_sweep(void *arg);
 
-/* helpers */
+/*
+ * Optimizer: Aggregate Mask Management
+ */
+static void env_recompute_aggregate_mask(struct env_device *e) {
+    uint32_t combined = 0;
+    for (size_t i = 0; i < e->capacity; i++) {
+        if (e->entries[i].live) {
+            combined |= e->entries[i].mask;
+        }
+    }
+    e->active_mask_or = combined;
+}
 
+/* CORE HELPERS */
 static inline size_t env_footprint(const struct env_entry *s) {
     return (size_t)s->ns_len + s->name_len + s->value_len;
 }
@@ -121,6 +119,33 @@ static struct env_entry *env_find_free_slot(struct env_device *e) {
     return NULL;
 }
 
+/* Optimizer: Staged String Allocation */
+
+static int env_stage_strings(const char *ns, size_t ns_len,
+                             const char *name, size_t name_len,
+                             const char *value, size_t value_len,
+                             char **out_ns, char **out_name, char **out_value) {
+    char *n_ns = kmalloc(ns_len + 1);
+    char *n_name = kmalloc(name_len + 1);
+    char *n_value = kmalloc(value_len + 1);
+
+    if (n_ns == NULL || n_name == NULL || n_value == NULL) {
+        kfree(n_ns);
+        kfree(n_name);
+        kfree(n_value);
+        return ENV_NO_SPACE;
+    }
+
+    memcpy(n_ns, ns, ns_len);         n_ns[ns_len] = '\0';
+    memcpy(n_name, name, name_len);     n_name[name_len] = '\0';
+    memcpy(n_value, value, value_len); n_value[value_len] = '\0';
+
+    *out_ns = n_ns;
+    *out_name = n_name;
+    *out_value = n_value;
+    return ENV_OK;
+}
+
 static void env_reclaim(struct env_device *e, struct env_entry *slot,
                         enum env_reclaim_reason reason) {
     if (!slot->live) return;
@@ -146,10 +171,13 @@ static void env_reclaim(struct env_device *e, struct env_entry *slot,
 
     if (e->count > 0) e->count--;
 
+    // aggregate mask after reclamation
+    env_recompute_aggregate_mask(e);
+
     switch (reason) {
-    case ENV_RECLAIM_ACCESS:   e->n_reclaim_access++;   break;
-    case ENV_RECLAIM_TIME:     e->n_reclaim_time++;     break;
-    case ENV_RECLAIM_SPACE:    e->n_reclaim_space++;    break;
+    case ENV_RECLAIM_ACCESS:    e->n_reclaim_access++;    break;
+    case ENV_RECLAIM_TIME:      e->n_reclaim_time++;      break;
+    case ENV_RECLAIM_SPACE:     e->n_reclaim_space++;     break;
     case ENV_RECLAIM_EXPLICIT: e->n_reclaim_explicit++; break;
     }
 }
@@ -162,16 +190,13 @@ static void env_reap_expired(struct env_device *e) {
     }
 }
 
-/* Eviction order: lowest importance first (higher = more valuable),
- * then least recently accessed, then name as a deterministic tiebreak.
- * `exclude` (may be NULL) is never chosen. */
 static struct env_entry *env_pick_victim(struct env_device *e,
                                          const struct env_entry *exclude) {
     struct env_entry *victim = NULL;
     for (size_t i = 0; i < e->capacity; i++) {
         struct env_entry *s = &e->entries[i];
         if (!s->live || s == exclude) continue;
-        if (s->mask & ENV_FLAG_PINNED) continue; /* immune to space-pressure eviction */
+        if (s->mask & ENV_FLAG_PINNED) continue;
         if (victim == NULL) { victim = s; continue; }
         if (s->importance < victim->importance) { victim = s; continue; }
         if (s->importance > victim->importance) continue;
@@ -182,10 +207,6 @@ static struct env_entry *env_pick_victim(struct env_device *e,
     return victim;
 }
 
-/* Make room for `footprint` bytes. If `existing` is non-NULL it is being
- * replaced in place: its bytes are credited and its slot is reused, and it is
- * never evicted. Caller guarantees footprint <= max_bytes, so this terminates
- * with success once every other entry has been evicted. */
 static bool env_make_room(struct env_device *e, size_t footprint,
                           const struct env_entry *existing) {
     size_t credit = (existing != NULL) ? env_footprint(existing) : 0;
@@ -202,8 +223,7 @@ static bool env_make_room(struct env_device *e, size_t footprint,
     }
 }
 
-/* ops */
-
+/* OPS */
 static int env_set(const char *ns, const char *name, const char *value,
                    uint32_t access_budget, uint64_t ttl_ticks,
                    uint8_t importance, uint32_t mask) {
@@ -221,43 +241,33 @@ static int env_set(const char *ns, const char *name, const char *value,
     if (importance > ENV_IMPORTANCE_MAX) importance = ENV_IMPORTANCE_MAX;
 
     size_t footprint = ns_len + name_len + value_len;
-    if (footprint > e->max_bytes) return ENV_NO_SPACE;   /* can never fit: evict nothing */
+    if (footprint > e->max_bytes) return ENV_NO_SPACE;
 
-    /* Reap first so a stale duplicate can't coexist with the new entry. */
     env_reap_expired(e);
     struct env_entry *existing = env_find(e, ns, ns_len, name, name_len);
 
-    /* 1. Perform permission/overwrite validation FIRST before allocating strings */
+    /* 1. Permission and overwrite validation */
     if (existing != NULL) {
         uint32_t old_flags = env_mask_flags(existing->mask);
         uint32_t old_owner = env_mask_owner(existing->mask);
         uint32_t mask_arg  = env_mask_owner(mask);
 
-        /* PINNED: only the original owner may rewrite (Fixed double-masking bug here) */
         if ((old_flags & ENV_FLAG_PINNED) && old_owner != mask_arg)
             return ENV_READONLY;
 
-        /* READONLY: one-shot-write, authentic values  */
         if (old_flags & ENV_FLAG_READONLY)
             return ENV_READONLY;
     }
 
-    /* Check and make room before allocating */
     if (!env_make_room(e, footprint, existing)) {
         return ENV_NO_SPACE;
     }
 
-    /* 2. Stage the new strings ONLY after all validation passes */
-    char *n_ns    = kmalloc(ns_len + 1);
-    char *n_name  = kmalloc(name_len + 1);
-    char *n_value = kmalloc(value_len + 1);
-    if (n_ns == NULL || n_name == NULL || n_value == NULL) {
-        kfree(n_ns); kfree(n_name); kfree(n_value);
-        return ENV_NO_SPACE;
-    }
-    memcpy(n_ns, ns, ns_len);         n_ns[ns_len] = '\0';
-    memcpy(n_name, name, name_len);     n_name[name_len] = '\0';
-    memcpy(n_value, value, value_len); n_value[value_len] = '\0';
+    /* 2. Stage new strings safely via helper */
+    char *n_ns = NULL, *n_name = NULL, *n_value = NULL;
+    int st = env_stage_strings(ns, ns_len, name, name_len, value, value_len,
+                               &n_ns, &n_name, &n_value);
+    if (st != ENV_OK) return st;
 
     struct env_entry *slot = existing;
     if (slot == NULL) {
@@ -290,6 +300,10 @@ static int env_set(const char *ns, const char *name, const char *value,
 
     e->used_bytes += footprint;
     e->n_set++;
+
+    // aggregate mask after setting
+    env_recompute_aggregate_mask(e);
+
     return ENV_OK;
 }
 
@@ -308,7 +322,7 @@ static int env_get_common(const char *ns, const char *name,
     if (s == NULL) return ENV_NOT_FOUND;
 
     if (len_out != NULL) *len_out = s->value_len;
-    if (buf_max < (size_t)s->value_len + 1) return ENV_BUFFER_TOO_SMALL; /* nothing consumed */
+    if (buf_max < (size_t)s->value_len + 1) return ENV_BUFFER_TOO_SMALL;
 
     memcpy(buf, s->value, s->value_len);
     buf[s->value_len] = '\0';
@@ -321,7 +335,7 @@ static int env_get_common(const char *ns, const char *name,
 
     e->n_get++;
     if (s->access_remaining == 1)
-        env_reclaim(e, s, ENV_RECLAIM_ACCESS);   /* caller already holds a copy */
+        env_reclaim(e, s, ENV_RECLAIM_ACCESS);
     else if (s->access_remaining > 1)
         s->access_remaining--;
     return ENV_OK;
@@ -400,7 +414,6 @@ static int env_info(struct env_info *out) {
     return ENV_OK;
 }
 
-/* Index-resume listing: O(N) total across a full enumeration. */
 static int env_list(const char *ns, size_t *iter,
                     char *name_out, size_t name_max) {
     struct env_device *e = g_env;
@@ -463,9 +476,9 @@ static int env_list_all(size_t *iter,
     return ENV_NOT_FOUND;
 }
 
-/* Cross-namespace bitmask query. The mask is opaque to env: an entry matches
- * when it carries every bit of query_mask. A zero query is rejected rather
- * than silently matching the whole store. */
+/*
+ * Optimizers: Device-Level Aggregate Mask
+ */
 static int env_list_by_mask(uint32_t query_mask, size_t *iter,
                             char *ns_out, size_t ns_max,
                             char *name_out, size_t name_max) {
@@ -474,6 +487,12 @@ static int env_list_by_mask(uint32_t query_mask, size_t *iter,
     if (query_mask == 0) return ENV_INVALID_ARGS;
     if (iter == NULL || ns_out == NULL || name_out == NULL) return ENV_INVALID_ARGS;
     if (ns_max == 0 || name_max == 0) return ENV_INVALID_ARGS;
+
+    /* O(1) SHORT-CIRCUIT: If requested bits aren't anywhere in the store, bail out instantly */
+    if ((e->active_mask_or & query_mask) != query_mask) {
+        *iter = e->capacity;
+        return ENV_NOT_FOUND;
+    }
 
     for (size_t i = *iter; i < e->capacity; i++) {
         struct env_entry *s = &e->entries[i];
@@ -493,6 +512,12 @@ static int env_count_by_mask(uint32_t query_mask, size_t *count_out) {
     struct env_device *e = g_env;
     if (e == NULL) return ENV_NO_DEVICE;
     if (query_mask == 0 || count_out == NULL) return ENV_INVALID_ARGS;
+
+    /* O(1) SHORT-CIRCUIT */
+    if ((e->active_mask_or & query_mask) != query_mask) {
+        *count_out = 0;
+        return ENV_OK;
+    }
 
     size_t n = 0;
     for (size_t i = 0; i < e->capacity; i++) {
@@ -519,9 +544,6 @@ static int env_drop_namespace(const char *ns) {
     }
     return ENV_OK;
 }
-
-/* sweeper: examines at most ENV_SWEEP_BATCH slots per pass, resuming where the
- * previous pass stopped, so every slot is visited within capacity/BATCH passes. */
 
 static void env_sweep(void *arg) {
     struct env_device *e = arg;
@@ -555,12 +577,10 @@ void env_destroy(void) {
         if (e->entries[i].live) env_reclaim(e, &e->entries[i], ENV_RECLAIM_EXPLICIT);
     }
 
-    g_env = NULL;       /* ops now return ENV_NO_DEVICE */
+    g_env = NULL;
     kfree(e->entries);
     kfree(e);
 }
-
-/* bus registration */
 
 static const struct env_ops env_bus_ops = {
     .set            = env_set,
@@ -577,8 +597,6 @@ static const struct env_ops env_bus_ops = {
     .drop_namespace = env_drop_namespace,
 };
 
-/* init */
-
 void env_init(size_t max_entries, size_t max_bytes) {
     if (max_entries == 0) max_entries = ENV_DEFAULT_MAX_ENTRIES;
     if (max_bytes   == 0) max_bytes   = ENV_DEFAULT_MAX_BYTES;
@@ -591,10 +609,11 @@ void env_init(size_t max_entries, size_t max_bytes) {
     e->entries = kzalloc(max_entries * sizeof *e->entries);
     if (e->entries == NULL) PANIC("env: cannot allocate slot table");
 
-    e->capacity   = max_entries;
-    e->max_bytes  = max_bytes;
-    e->sweep_id   = -1;
-    e->sweep_pos  = 0;
+    e->capacity       = max_entries;
+    e->max_bytes      = max_bytes;
+    e->active_mask_or = 0;
+    e->sweep_id       = -1;
+    e->sweep_pos      = 0;
 
     g_env = e;
 
@@ -606,8 +625,8 @@ void env_init(size_t max_entries, size_t max_bytes) {
     }
 
     klog("→ env_init() entries=%zu, bytes=%zu, timer=%s\n",
-            max_entries, max_bytes,
-            e->timer ? "attached" : "disabled");
+          max_entries, max_bytes,
+          e->timer ? "attached" : "disabled");
 
     struct bus_device dev = {
         .name         = "env",
