@@ -177,7 +177,7 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 	* `vm16_decimal_fault_test()`
  	* `vm16_decimal_setget_test()`
 
-## 8259 PIC driver, Timer conversions
+## In-depth: 8259 PIC driver, Timer conversions
 
 - `core/timer.h`, `core/timer.c`: overflow-safe millisecond→tick conversions with an explicit rounding policy at every call site.
   - `ms_to_ticks_floor`, largest tick count ≤ `ms`
@@ -187,14 +187,15 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 
 All three saturate on overflow, and treat `hz == 0` as "timer not initialized" (return 0).
 
-## Environment Storage, Bus Registry, Manifest and Device Discovery
+## In-depth: Environment Storage, Bus Registry, Manifest and Device Discovery
 
-`core/env.c`, `core/env.h`, `core/mask.h`, `core/bus.c`:
+`core/env.c`, `core/env.h`, `core/mask.h`, `core/bus.c`:  
 The environment device is a bounded, fixed-capacity store of `(namespace, name) → value` entries, registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
 
 <img width="1286" height="863" alt="Screenshot_2026-11-06_23-04-0833" src="https://github.com/user-attachments/assets/e0183475-a18f-4b84-88ac-85c97c193578" />  
 
-Per-entry policy:
+
+Per-entry policy:  
 
 - **access budget**, reclaimed synchronously when exhausted
 - **time budget (TTL)**, reclaimed asynchronously by a timer-driven sweeper  
@@ -212,7 +213,7 @@ Per-entry policy:
     +----------+--------+--------+-------------------+
 ```
 
-**Types:**
+**Types:**  
 
 ```c
 #define ENV_TYPE_NONE          0u   /* opaque blob, unset */
@@ -226,7 +227,7 @@ Per-entry policy:
 #define ENV_TYPE_BIN           8u   /* binary data */
 ```
 
-**Flags:**
+**Flags:**  
 
 ```c
 #define ENV_FLAG_READONLY      (1u << 16)  /* policy: one-shot, no overwrites */
@@ -238,9 +239,9 @@ Per-entry policy:
 > **Remark:**  
 > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot writes, with one exception: for `PINNED`, only the owner of the object may modify this value or its parameters, though it can still be `unset` (erased).
 
-## Software-based Decimals
+## In-depth: Software-based Decimals
 
-`ext/script/decimal.c`, `ext/script/decimal.h`:
+`ext/script/decimal.c`, `ext/script/decimal.h`:  
 
 Software-only decimal arithmetic, no FPU or SSE instructions anywhere in the path.  
 A signed integer payload is combined with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).
@@ -262,23 +263,9 @@ Decimal bit layout:
 All calculations rely entirely on safe integer math (`int64_t`/`__int128`) with explicit overflow checks and dynamic rounding modes.  
 Usage is simple: call `dec_set()` to store a value with your target scale and signature configuration, and `dec_get()` to retrieve and decode it back.
 
-## fbcon extension: PSF Glyph fonts
+## In-depth: Proxy
 
-`ext/fbcon/`, `ext/assets/fonts.h`:
-
-PSF glyphs converted from the Debian console fonts. Selectable families:
-
-- **Western Latin**, `default`, `lat`, `iso`
-- **IBM PC / DOS**, `cp…`, `alt`
-- **Cyrillic &amp; Eastern European**, `Cyr`, `ruscii`, `koi8`, `Mik`
-- **Greek**, `gr`, `greek`, `gr737`
-- **Multi-script**, `LatArCyrHeb`
-- **Regional / Asian**, `Goha`, `arm`, `tis`, `tcvn`, `viscii`
-- **Accessibility**, `brl` (Braille)
-
-## Proxy
-
-`ext/proxy/`:
+`ext/proxy/`:  
 
 Inspired by .NET's `MarshalByRefObject`, the proxy layer is a safe-call boundary over the bus.  
 Consumers lease a handle by name, call methods by opcode, and unbind:
@@ -292,6 +279,21 @@ if (p->bind("console", &h) == PROXY_OK) {
     p->unbind(h);
 }
 ```
+
+## In-depth: fbcon extension: PSF Glyph fonts
+
+`ext/fbcon/`, `ext/assets/fonts.h`:
+
+PSF glyphs converted from the Debian console fonts. Selectable families:
+
+- **Western Latin**, `default`, `lat`, `iso`
+- **IBM PC / DOS**, `cp…`, `alt`
+- **Cyrillic &amp; Eastern European**, `Cyr`, `ruscii`, `koi8`, `Mik`
+- **Greek**, `gr`, `greek`, `gr737`
+- **Multi-script**, `LatArCyrHeb`
+- **Regional / Asian**, `Goha`, `arm`, `tis`, `tcvn`, `viscii`
+- **Accessibility**, `brl` (Braille)
+
 
 ---
 
