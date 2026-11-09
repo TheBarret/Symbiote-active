@@ -39,14 +39,13 @@ enum vm_fault {
     VM_ERR_ILLEGAL,     /* reserved opcode, or RTI (no interrupts yet) */
     VM_ERR_UNIMPL,      /* trap vector not implemented in stage 1 */
     VM_ERR_BADPC,       /* reserved: PC range check (cannot fire at 64K) */
-    VM_ERR_BADSTATE,    /* NULL memory / uninitialised ctx */
+    VM_ERR_BADSTATE,    /* NULL memory / uninitialised ctx / env device absent */
+    VM_ERR_DEC_GET,     /* dec trap: operand fetch failed (missing, mistyped, corrupt mask) */
+    VM_ERR_DEC_OP,      /* dec trap: bad scale/rounding parameter, or failed arithmetic */
+    VM_ERR_DEC_STORE,   /* dec trap: result could not be stored back into env */
 };
-
-enum regist {
-    R0 = 0, R1, R2, R3, R4, R5, R6, R7,
-    PC, FLAGS,
-    RCOUNT
-};
+/* Registers, state flags */
+enum regist { R0 = 0, R1, R2, R3, R4, R5, R6, R7, PC, FLAGS, RCOUNT };
 
 struct vm_ctx {
     uint16_t        *mem;               /* VM_MEMSIZE words, kzalloc'd */
@@ -66,6 +65,10 @@ struct vm_ops {
     void            (*stop)  (struct vm_ctx *c);
     void            (*free)  (struct vm_ctx *c);
 };
+
+/* helpers */
+int64_t vm_read_i64(const struct vm_ctx *c, uint16_t a);
+void vm_write_i64(struct vm_ctx *c, uint16_t a, int64_t v);
 
 /* Direct API, for in-tree tests; identical semantics to g_vm_ops members. */
 int             vm_init(struct vm_ctx *c);
