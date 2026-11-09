@@ -272,14 +272,26 @@ Because `mask.h` partitions the 32-bit field into distinct functional segments, 
 
 `ext/script/decimal.c`, `ext/script/decimal.h`:  
 
-Software-only decimal arithmetic, no FPU or SSE instructions anywhere in the path.  
-A signed integer payload is combined with a fractional scale factor stored out-of-band in environment `mask.h` metadata (`dec.<namespace>`).
+The `decimal.h` used as co-processor with the `env` store's 32-bit mask to carry its type metadata out-of-band,  
+exactly where the value string normally lives.  
 
-<img width="984" height="497" alt="decimals" src="https://github.com/user-attachments/assets/cc779130-cd4d-4ab5-8b8e-e8c28ca5b623" />  
+1. **The Mask Layout:**  
+   The 32-bit mask is divided into four fields: `OWNER`, `TYPE`, `FLAGS`, and `PRIVATE`.  
+   The decimal module completely ignores the top 16 bits and takes total ownership of the bottom 16 (`PRIVATE`). 
 
+3. **The Private Contract:**  
+   The decimal module splits its 16-bit `PRIVATE` space into three parts: a `SCALE` (8 bits), a `ROUND` mode (4 bits), and `FLAGS` (4 bits).  
+   The `DEC_P_MAKE` macro packs these together when storing a value, and the `DEC_P_SCALE`/`DEC_P_ROUND` macros unpack them when reading.  
+
+5. **The Data Flow:**  
+   When the kernel stores a decimal (`dec_set`), it encodes `75.00` as the integer string `"7500"`,  
+   packs a scale of `2` and `HALF_UP` rounding into the mask's private area, and saves both to `env`.  
+   When an application retrieves it (`dec_get`), it reads the mask and string, uses `parse_i64` to extract the magnitude (`7500`),  
+   and reconstructs the final `struct dec` (magnitude `7500`, scale `2`).  
+
+*The mask carries the metadata; the string carries the payload, the decimal module is a translator between an integer string and a formatted software float.*  
 
 Decimal bit layout:
-
 ```c
 #define DEC_P_SCALE(priv) (((priv) >> 8) & 0xFF)
 #define DEC_P_ROUND(priv) (((priv) >> 4) & 0x0F)
@@ -291,6 +303,7 @@ Decimal bit layout:
 
 All calculations rely entirely on safe integer math (`int64_t`/`__int128`) with explicit overflow checks and dynamic rounding modes.  
 Usage is simple: call `dec_set()` to store a value with your target scale and signature configuration, and `dec_get()` to retrieve and decode it back.
+
 
 ## In-depth: Proxy
 
