@@ -54,6 +54,7 @@ static inline uint16_t sext(uint16_t x, unsigned bits)
     return x;
 }
 
+
 _Static_assert(VM_MEMSIZE == 0x10000u, "vm16: vrd/vwr assume a full 16-bit address space");
 
 static inline uint16_t vrd(const struct vm_ctx *c, uint16_t a)
@@ -120,30 +121,38 @@ static void trap(struct vm_ctx *c, uint16_t i)
         c->status = VM_HALT;
         return;
 
+    case T_DEC_GET:
+    case T_DEC_SET:
     case T_DEC_ADD:
     case T_DEC_SUB:
     case T_DEC_MUL:
     case T_DEC_DIV:
     case T_DEC_MOD:
     case T_DEC_CMP: {
-        /* Convention:
-         * R0 = pointer to namespace string (or 0 for default)
-         * R1 = pointer to operand A name string
-         * R2 = pointer to operand B name string
-         * R3 = pointer to result name string (for store operations)
-         * R4 = result scale (low byte) and rounding mode (high byte)
+        /* Register conventions:
+         *   R0 = namespace string pointer (0 = kernel default namespace)
+         *   R1 = operand A / source name string pointer
+         *   R2 = operand B name (arith/cmp) | value ptr (GET dest, SET src)
+         *   R3 = result name (arith) | packed metadata out (GET)
+         *   R4 = scale (low byte; 0xFF = service default) << 8 | rounding (high nibble)
+         *
+         * Fault contract: any failure raises ctx->fault and stops the VM.
+         * Condition codes are set ONLY by a successful T_DEC_CMP. R0 is
+         * clobbered by CMP (result) and by arith traps (success indicator).
+         * Stored importance is always 0: scripted data is evictable, the
+         * self-regulating env reclaims it under pressure.
          */
         char ns_buf[32] = {0};
-        char a_buf[32] = {0};
-        char b_buf[32] = {0};
-        char r_buf[32] = {0};
+        char a_buf[32]  = {0};
+        char b_buf[32]  = {0};
+        char r_buf[32]  = {0};
 
-        if (c->reg[R0] != 0) read_vm_str(c, c->reg[R0], ns_buf, sizeof(ns_buf));
-        read_vm_str(c, c->reg[R1], a_buf, sizeof(a_buf));
-        read_vm_str(c, c->reg[R2], b_buf, sizeof(b_buf));
-        if (vector != T_DEC_CMP) {
-            read_vm_str(c, c->reg[R3], r_buf, sizeof(r_buf));
+        const char *ns = NULL;
+        if (c->reg[R0] != 0) {
+            read_vm_str(c, c->reg[R0], ns_buf, sizeof ns_buf);
+            ns = ns_buf[0] ? ns_buf : NULL;
         }
+        read_vm_str(c, c->reg[R1], a_buf, sizeof a_buf);
 
         const struct env_ops *env = bus_env();
         if (env == NULL) {
@@ -151,24 +160,78 @@ static void trap(struct vm_ctx *c, uint16_t i)
             return;
         }
 
-        struct dec op_a = dec_get(env, ns_buf[0] ? ns_buf : NULL, a_buf);
-        struct dec op_b = dec_get(env, ns_buf[0] ? ns_buf : NULL, b_buf);
-
-        uint8_t result_scale = (uint8_t)(c->reg[R4] & 0xFF);
+        uint8_t scale_raw = (uint8_t)(c->reg[R4] & 0xFF);
         enum dec_round rnd = (enum dec_round)((c->reg[R4] >> 8) & 0x0F);
+
+        /* Parameter validation happens HERE, before any decimal call:
+         * a raw scale of 200 cast to int8_t would alias to -56 and silently
+         * select the default scale; an invalid rounding nibble would silently
+         * degrade to TRUNC inside dec_set. Both must fault instead.
+         * 0xFF is the explicit "use the service default" selector. */
+        bool scale_ok = (scale_raw == 0xFF) || (scale_raw <= DEC_MAX_SCALE);
+        if (!scale_ok || !DEC_RND_VALID(rnd)) {
+            vm_raise(c, VM_ERR_DEC_OP);
+            return;
+        }
+
+        /* T_DEC_GET: fetch a decimal, serialize it back to the script.
+         * value -> [R2 .. R2+3] little-endian; metadata word -> R3, laid out
+         * exactly like DEC_P_ (scale<<8 | round<<4 | flags). */
+        if (vector == T_DEC_GET) {
+            struct dec d = dec_get(env, ns, a_buf);
+            if (!d.ok) {
+                vm_raise(c, VM_ERR_DEC_GET);
+                return;
+            }
+            vm_write_i64(c, c->reg[R2], d.mag);
+            c->reg[R3] = (uint16_t)(((uint16_t)d.scale << 8)
+                                   | ((uint16_t)d.round << 4)
+                                   | (uint16_t)d.flags);
+            return;
+        }
+
+        /* T_DEC_SET: store a script-supplied value under scale/rounding.
+         * Flags are forced to DEC_F_SIGNED: scripts do not get to choose
+         * policy bits. Importance is fixed at 0 (see convention block). */
+        if (vector == T_DEC_SET) {
+            struct dec_signature sig = {
+                .default_scale = scale_raw,
+                .default_round = (uint8_t)rnd,
+                .default_flags = DEC_F_SIGNED,
+            };
+            int64_t mag = vm_read_i64(c, c->reg[R2]);
+            if (!dec_set(env, ns, a_buf, mag, (int8_t)scale_raw, &sig, 0)) {
+                vm_raise(c, VM_ERR_DEC_STORE);
+                return;
+            }
+            return;
+        }
+
+        /* Arithmetic / comparison: fetch both operands explicitly and fault
+         * on fetch failure BEFORE use, instead of relying on the arithmetic
+         * layer to re-validate a zeroed struct dec. */
+        read_vm_str(c, c->reg[R2], b_buf, sizeof b_buf);
+        struct dec op_a = dec_get(env, ns, a_buf);
+        struct dec op_b = dec_get(env, ns, b_buf);
+        if (!op_a.ok || !op_b.ok) {
+            vm_raise(c, VM_ERR_DEC_GET);
+            return;
+        }
 
         if (vector == T_DEC_CMP) {
             int cmp_res = dec_cmp(op_a, op_b);
             if (cmp_res == -2) {
-                vm_raise(c, VM_ERR_BADSTATE);
+                /* Unreachable after the ok check above; kept as armor so a
+                 * future dec_cmp change cannot leak a fault onto the CC. */
+                vm_raise(c, VM_ERR_DEC_OP);
                 return;
             }
-            // Place comparison result in R0 (-1, 0, or 1) and set condition flags
-            c->reg[R0] = (uint16_t)(cmp_res < 0 ? 0xFFFF : cmp_res);
+            c->reg[R0] = (uint16_t)(cmp_res < 0 ? 0xFFFFu : (uint16_t)cmp_res);
             update_flags(c, R0);
             return;
         }
 
+        uint8_t result_scale = scale_raw;
         struct dec res = {0};
         switch (vector) {
         case T_DEC_ADD: res = dec_add(op_a, op_b, rnd, result_scale); break;
@@ -180,17 +243,17 @@ static void trap(struct vm_ctx *c, uint16_t i)
         }
 
         if (!res.ok) {
-            vm_raise(c, VM_ERR_BADSTATE);
+            vm_raise(c, VM_ERR_DEC_OP);
             return;
         }
 
-        bool stored = dec_set(env, ns_buf[0] ? ns_buf : NULL, r_buf, res.mag, (int8_t)res.scale, NULL, 0);
-        if (!stored) {
-            vm_raise(c, VM_ERR_BADSTATE);
+        read_vm_str(c, c->reg[R3], r_buf, sizeof r_buf);
+        if (!dec_set(env, ns, r_buf, res.mag, (int8_t)res.scale, NULL, 0)) {
+            vm_raise(c, VM_ERR_DEC_STORE);
             return;
         }
 
-        c->reg[R0] = 0; /* Success indicator */
+        c->reg[R0] = 0; /* success indicator */
         return;
     }
 
@@ -334,6 +397,27 @@ int vm_init(struct vm_ctx *c)
     return 0;
 }
 
+/* vm statics */
+
+/* int64 in VM memory: little-endian across 4 words, so script data crosses
+ * the boundary as a serialized payload, never as a raw kernel pointer. */
+int64_t vm_read_i64(const struct vm_ctx *c, uint16_t a)
+{
+    uint64_t v = 0;
+    for (int k = 3; k >= 0; k--)
+        v = (v << 16) | vrd(c, (uint16_t)(a + (uint16_t)k));
+    return (int64_t)v;
+}
+
+void vm_write_i64(struct vm_ctx *c, uint16_t a, int64_t v)
+{
+    uint64_t u = (uint64_t)v;
+    for (int k = 0; k < 4; k++) {
+        vwr(c, (uint16_t)(a + (uint16_t)k), (uint16_t)(u & 0xFFFFu));
+        u >>= 16;
+    }
+}
+
 int vm_load_native(struct vm_ctx *c, uint32_t origin,
                    const uint16_t *image, size_t nwords)
 {
@@ -434,8 +518,7 @@ int vm_ext_init(void)
         .private_data = NULL,
         .owner_id     = BUS_VM16,
     };
-    if (bus_register(&dev) != 0)
-        return -1;
+    if (bus_register(&dev) != 0) { return -1; }
     bus_test("vm16");
     return 0;
 }
@@ -443,9 +526,10 @@ int vm_ext_init(void)
 static int cmd_vm16_fn(const struct cmd_args *a) {
     (void)a;
     kprintf("Running vm16 selftesters...\n");
-    dec_selftest();
-    vm16_selftest();
-    vm16_decimal_integration_test();
+    dec_selftest();                     // decimal.h assert test
+    vm16_decimal_integration_test();    // vm16.c decimal.h integration test
+    vm16_decimal_fault_test();       // cmp against missing symbol -> VM_ERR_DEC_GET
+    vm16_decimal_setget_test();     // T_DEC_SET/T_DEC_GET round trip
     return CMD_OK;
 }
 
