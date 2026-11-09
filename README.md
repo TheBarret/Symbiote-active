@@ -7,7 +7,8 @@ in deliberate symbiosis: the core provides safe, handle-based services; the exte
 
 This repository (`0.1.*`) is the active development line of the `0.1.0 (alpha)` kernel, updated continuously.  
 
-<img width="1286" height="863" alt="boot" src="https://github.com/user-attachments/assets/486d02b5-a5db-4d07-89d9-94eea86f1096" />  
+<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/313969cb-245f-4af6-b844-df773b208fc5" />  
+
 
 
 *early testing*  
