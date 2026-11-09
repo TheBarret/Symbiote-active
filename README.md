@@ -142,10 +142,7 @@ A chunked free list with block headers and immediate coalescing.
 `kmalloc`, `kfree`, `kzalloc`, `krealloc`, growing in `256 KiB` chunks from the PMM.  
 The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, and owner tagging.
 
-# Active changes & log 0.1.1
-
-<img width="1015" height="937" alt="image" src="https://github.com/user-attachments/assets/b7eed0fe-0ea7-47f2-bc46-135eb50c099e" />  
-
+# Active changes & log 0.1.2 (LC-3, DEC)
 
 - `bus.c` publishes the full catalog of the bus registry: `kernel.dev.<name>.*`.
 - `fbcon` publishes console `column, row, width, height`: `kernel.dev.console.*`.
@@ -171,6 +168,14 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 - `ext/fbcon/fbcon.c` refactored, `Init → register → publish → brand`.
 - `ext/fbcon/fbcon_brand.c` added, draws top-right branding using `fbcon` (asset: `ext/assets/logo.h`).
 - `ext/fbcon/fbcon_manifest.c` added. publishes `fbcon` dimension fields on `env` store.
+
+- `ext/script/decimal.c`, `ext/script/test.c`, `ext/script/vm16.c`: refactored, patched `DEC_CMP` with `FAULT` logic.
+
+- `version.c`: bumped up to `0.1.2`, major changes: `LC-3` and `Decimal` features, added testers;
+	* `dec_selftest()`
+    * `vm16_decimal_integration_test()`
+	* `vm16_decimal_fault_test()`
+ 	* `vm16_decimal_setget_test()`
 
 ## 8259 PIC driver, Timer conversions
 
