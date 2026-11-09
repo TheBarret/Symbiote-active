@@ -245,7 +245,7 @@ Per-entry policy:
 > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot writes, with one exception: for `PINNED`,  
 > only the owner of the object may modify this value or its parameters, though it can still be `unset` (erased).  
 
-**Mask aggregate with mask.h Bit Ranges:**  
+**Mask aggregate optimizing:**  
 
 The `env` aggregate mask tracks active entry bits via a bitwise OR reduction (`active_mask_or`).  
 To prevent write-path overhead, additions maintain the aggregate incrementally in `O(1)` time (as OR operations are monotone),  
