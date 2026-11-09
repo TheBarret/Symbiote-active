@@ -42,6 +42,10 @@ enum dec_round {
     DEC_RND_HALF_EVEN = 2,   /* ties to even */
 };
 
+/* Trap/VM layers validate a raw rounding nibble before use:
+ * an invalid mode must fault, never silently degrade to a default. */
+#define DEC_RND_VALID(r) ((unsigned)(r) <= (unsigned)DEC_RND_HALF_EVEN)
+
 /* Signature parameter controlling default precision and behavior */
 struct dec_signature {
     uint8_t default_scale;
