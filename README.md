@@ -244,6 +244,28 @@ Per-entry policy:
 > **Remark:**  
 > `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot writes, with one exception: for `PINNED`, only the owner of the object may modify this value or its parameters, though it can still be `unset` (erased).
 
+**Mask aggregate with mask.h Bit Ranges:**  
+
+The `env` aggregate mask aggregates all active entry masks via a bitwise OR reduction (`active_mask_or |= entry->mask`).  
+Because `mask.h` partitions the 32-bit field into distinct functional segments, this structure optimizes queries across specific bit ranges:  
+
+1. **Owner Range (Bits 31..24)**
+* **Function:** Identifies the owning bus extension ID.
+* **Interaction:** When a query targets a specific owner ID  
+   (e.g., checking if any entries exist for a decommissioned or uninitialized driver),  
+   evaluating `(active_mask_or & query_mask) != query_mask` immediately bypasses the `O(N)` linear scan if that owner's bits are absent from the entire store.
+
+
+2. **Type Range (Bits 23..20)**
+* **Function:** Specifies data typing hints (e.g., `ENV_TYPE_INT`, `ENV_TYPE_PATH`).  
+* **Interaction:** Queries filtering by type tags benefit from immediate negative results when an entire data type is unpopulated in the environment space.
+
+
+3. **Flags and Private Ranges (Bits 19..0)**
+* **Function:** Universal core policies (`Readonly, Pinned, Secret, Cacheable`) and 16-bit private extension flags.
+* **Interaction:** Composite queries requiring specific flag combinations (such as searching for pinned secrets)  
+  short-circuit instantly if the aggregate OR mask lacks the required intersecting bits.
+
 ## In-depth: Software-based Decimals
 
 `ext/script/decimal.c`, `ext/script/decimal.h`:  
@@ -285,7 +307,7 @@ if (p->bind("console", &h) == PROXY_OK) {
 }
 ```
 
-## In-depth: fbcon extension: PSF Glyph fonts
+## In-depth: fbcon extension, with (Debian-ported) PSF Glyph fonts
 
 `ext/fbcon/`, `ext/assets/fonts.h`:
 
@@ -299,6 +321,7 @@ PSF glyphs converted from the Debian console fonts. Selectable families:
 - **Regional / Asian**, `Goha`, `arm`, `tis`, `tcvn`, `viscii`
 - **Accessibility**, `brl` (Braille)
 
+> A free to use tool was designed to convert PSF to C-based header assets, located in `/tools/psf2header.py`  
 
 ---
 
