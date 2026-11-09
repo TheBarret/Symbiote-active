@@ -57,48 +57,6 @@ static void timer_irq(void *ctx) {
     }
 }
 
-void timer_init(uint32_t hz) {
-    if (hz == 0)
-        hz = TIMER_HZ;
-    uint64_t d = PIT_FREQ / hz;
-    if (d < 1)     d = 1;
-    if (d > 65535) d = 65535;       /* 16-bit counter */
-    divisor = d;
-
-    outb(PIT_CMD, 0x34);            /* channel 0, lobyte/hibyte, mode 2 (rate generator) */
-    outb(PIT_CH0, (uint8_t)(d & 0xFF));
-    outb(PIT_CH0, (uint8_t)(d >> 8));
-
-    if (irq_register(0, timer_irq, NULL) != 0)
-        PANIC("timer: IRQ0 already taken");
-    inited = true;
-    klog("→ timer_init() 16-bit counter, channel 0, lobyte/hibyte, mode 2 (rate generator)\n");
-
-    struct bus_device dev = {
-        .name         = "timer",
-        .class        = BUS_CLASS_TIMER,
-        .version      = 1,
-        .ops          = &timer_bus_ops,
-        .private_data = NULL,
-        .owner_id     = BUS_TIMER_ID,
-    };
-    bus_register(&dev);
-    bus_test("timer");
-    /* env back-end */
-    timer_publish_id = timer_after(TIMER_PUBLISH_MS, timer_publish_task, NULL);
-}
-
-uint32_t timer_hz(void) {
-    return (uint32_t)((PIT_FREQ + divisor / 2) / divisor);
-}
-
-uint64_t timer_ticks(void) {
-    return ticks;
-}
-
-uint64_t uptime_ms(void) {
-    return ticks * divisor * 1000ull / PIT_FREQ;
-}
 
 
 /* ms -> ticks conversions */
@@ -128,7 +86,7 @@ static uint64_t ms_to_ticks_prepare(uint64_t ms, uint64_t *whole_out,
                                     uint64_t *rem_out) {
     /* Returns hz, or 0 if the timer is not initialised.
      * On success, fills *whole_out and *rem_out such that:
-     *     ms * hz == whole * 1000 + rem, with 0 <= rem < 1000. */
+     * ms * hz == whole * 1000 + rem, with 0 <= rem < 1000. */
     uint64_t hz = timer_hz();
     if (hz == 0)
         return 0;
@@ -320,4 +278,48 @@ static void timer_publish_task(void *arg) {
     (void)arg;
     timer_publish_id = timer_after(TIMER_PUBLISH_MS, timer_publish_task, NULL);
     timer_publish_snapshot();
+}
+
+
+void timer_init(uint32_t hz) {
+    if (hz == 0)
+        hz = TIMER_HZ; // = 1000hz
+    uint64_t d = PIT_FREQ / hz;
+    if (d < 1)     d = 1;
+    if (d > 65535) d = 65535;       /* 16-bit counter */
+    divisor = d;
+
+    outb(PIT_CMD, 0x34);            /* channel 0, lobyte/hibyte, mode 2 (rate generator) */
+    outb(PIT_CH0, (uint8_t)(d & 0xFF));
+    outb(PIT_CH0, (uint8_t)(d >> 8));
+
+    if (irq_register(0, timer_irq, NULL) != 0)
+        PANIC("timer: IRQ0 already taken");
+    inited = true;
+    klog("→ timer_init(freq=%u hz, irq=0, channel=0, mode=2)\n", hz);
+
+    struct bus_device dev = {
+        .name         = "timer",
+        .class        = BUS_CLASS_TIMER,
+        .version      = 1,
+        .ops          = &timer_bus_ops,
+        .private_data = NULL,
+        .owner_id     = BUS_TIMER_ID,
+    };
+    bus_register(&dev);
+    bus_test("timer");
+    /* env back-end */
+    timer_publish_id = timer_after(TIMER_PUBLISH_MS, timer_publish_task, NULL);
+}
+
+uint32_t timer_hz(void) {
+    return (uint32_t)((PIT_FREQ + divisor / 2) / divisor);
+}
+
+uint64_t timer_ticks(void) {
+    return ticks;
+}
+
+uint64_t uptime_ms(void) {
+    return ticks * divisor * 1000ull / PIT_FREQ;
 }
