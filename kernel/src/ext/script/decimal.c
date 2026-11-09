@@ -412,7 +412,12 @@ struct dec dec_mod(struct dec a, struct dec b, enum dec_round rnd, uint8_t resul
     return r;
 }
 
-/* CMP operations */
+/* CMP operations.
+ * Two-tier comparison: the fast path rescales in int64 via dec_align;
+ * when that overflows, the fallback rescales in u128.
+ * In the fallback, magnitudes are < 2^63 and scale gaps are <= 10^18,
+ * so a scaled operand stays below 2^63 * 2^60 = 2^124: u128_mul_pow10 cannot fail.
+ * Defensively guarded because a mid-loop failure would leave the operand PARTIALLY scaled and compare against the wrong value. */
 int dec_cmp(struct dec a, struct dec b)
 {
     if (!dec_valid(&a) || !dec_valid(&b)) return -2;
@@ -421,29 +426,28 @@ int dec_cmp(struct dec a, struct dec b)
     struct dec a_copy = a;
     struct dec b_copy = b;
 
-    if (!dec_align(&a_copy, &b_copy, &common)) {
-        /* Alignment failed because scaling up exceeded int64_t bounds.
-         * Fall back to u128 scale-cross comparison to compare precisely. */
-        bool na, nb;
-        u128 ma = mag_of(a.mag, &na);
-        u128 mb = mag_of(b.mag, &nb);
-
-        if (na != nb) { return na ? -1 : 1; /* Negative is always less than positive */ }
-
-        u128 ma_scaled = ma;
-        u128 mb_scaled = mb;
-        if (a.scale < b.scale) {
-            u128_mul_pow10(&ma_scaled, (unsigned)(b.scale - a.scale));
-        } else if (b.scale < a.scale) {
-            u128_mul_pow10(&mb_scaled, (unsigned)(a.scale - b.scale));
-        }
-
-        int res = (ma_scaled < mb_scaled) ? -1 : ((ma_scaled > mb_scaled) ? 1 : 0);
-        return na ? -res : res;
+    if (dec_align(&a_copy, &b_copy, &common)) {
+        /* Successfully aligned and fits within int64 bounds */
+        if (a_copy.mag < b_copy.mag) return -1;
+        if (a_copy.mag > b_copy.mag) return 1;
+        return 0;
     }
 
-    /* Successfully aligned and fits within int64 bounds */
-    if (a_copy.mag < b_copy.mag) return -1;
-    if (a_copy.mag > b_copy.mag) return 1;
-    return 0;
+    /* Alignment failed because scaling up exceeded int64_t bounds.
+     * Compare exactly in u128. Signs differ: sign decides (covers zero,
+     * which mag_of reports as positive). */
+    bool na, nb;
+    u128 ma = mag_of(a.mag, &na);
+    u128 mb = mag_of(b.mag, &nb);
+    if (na != nb) return na ? -1 : 1;
+
+    u128 sa = ma, sb = mb;
+    if (a.scale < b.scale) {
+        if (!u128_mul_pow10(&sa, (unsigned)(b.scale - a.scale))) return -2;   /* unreachable: < 2^124 */
+    } else if (b.scale < a.scale) {
+        if (!u128_mul_pow10(&sb, (unsigned)(a.scale - b.scale))) return -2;   /* unreachable: < 2^124 */
+    }
+
+    int res = (sa < sb) ? -1 : ((sa > sb) ? 1 : 0);
+    return na ? -res : res;        /* both negative: bigger magnitude is smaller value */
 }
