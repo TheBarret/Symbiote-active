@@ -224,7 +224,7 @@ Per-entry policy:
 	(60,000 ticks at 1000 Hz is exactly 60 seconds, one minute).  
 	Reads are exact whether or not the sweeper has run: an expired entry always reads as absent.  
     The TTL saturates, so it can never wrap into "already expired".  
-- **importance**, `0–10`, higher is more valuable; it decides who may be evicted under space pressure
+- **importance**, `0–10`, *0 is persistent, counting up means less importance*; it decides who may be evicted under space pressure
 - **mask**, a 32-bit classification field that env enforces in part (the flags) and otherwise never interprets
 
 `mask.h` defines the 32-bit field layout:
