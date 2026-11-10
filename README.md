@@ -181,13 +181,12 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
    for mask-based queries (`env_list_by_mask` and `env_count_by_mask`), integrated automatic recalculation hooks into `env_set()` and `env_reclaim()`
    to maintain bitfield synchronization without iterative overhead during read paths.
 
-- `core/dev/env.c`: fixed a memory leak in `env_set`'s overwrite-flag logic.
 - `core/dev/env.c`: **`READONLY` and `PINNED` are now actually enforced** on overwrite. The gate previously tested the shifted `env_mask_flags()` value against the unshifted `ENV_FLAG_*` constants and could never fire.
 - `core/dev/env.c`: aggregate mask is now an **exact index** (`bit_cnt`, `owner_cnt`, `type_cnt`, `active_mask_or`) maintained in `O(1)` on every set and reclaim. The `mask_dirty` flag and the lazy recompute scan are removed.
 - `core/dev/env.h`: new **care/want queries**, `list_match` / `count_match`, plus `ENV_Q_OWNER` / `ENV_Q_TYPE` / `ENV_Q_FLAG` in `mask.h`. `OWNER` and `TYPE` are numbers, so the old subset-style `*_by_mask` calls misreported them (owner 1 matched owners 3, 5, 7). The legacy calls remain, documented as flag/private-bit only. New ops are appended to `env_ops`, so existing consumers are unaffected.
-- `core/dev/env.c`: **`set()` is all-or-nothing.** Strings are staged first, then eligible space is proven before anything is evicted. A failed write (`ENV_NO_SPACE`, `ENV_READONLY`, heap exhaustion) no longer evicts other entries.
+- `core/dev/env.c`: **`set()` is all-or-nothing enforced** Strings are staged first, then eligible space is proven before anything is evicted. A failed write (`ENV_NO_SPACE`, `ENV_READONLY`, heap exhaustion) no longer evicts other entries.
 - `core/dev/env.c`: eviction respects the incoming write's importance (only entries with importance ≤ the write's are eligible), and `CACHEABLE` entries are evicted before non-cacheable ones of equal importance.
-- `core/dev/env.c`: `SECRET` is now honored: hidden from `list`, `list_all` and from queries whose `care` omits the bit.
+- `core/dev/env.c`: `SECRET` is more strongly honored: hidden from `list`, `list_all` and from queries whose `care` omits the bit.
 - `core/dev/env.c`: an expired entry under a re-set key is reclaimed on the spot (one live slot per key); TTL arithmetic saturates instead of wrapping.
 - `core/dev/env.c`: `env_init()` ignores a second call with a warning; a failed `bus_register` is logged.
 - `core/mask.h`: added `env_mask_has()`; documented that `env_mask_flags()` returns shifted-down flags.
