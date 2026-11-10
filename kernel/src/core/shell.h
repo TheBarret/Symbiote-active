@@ -3,11 +3,24 @@
 
 /* Interactive command loop.
  *
- * Reads a line from the keyboard, splits it into words, and hands the words to the command registry (core/cmd.h),
- * which finds the command, checks the arguments against the parameters it declared, and runs it.
+ * The shell is now a state machine ticked by the kernel's main loop,
+ * rather than an infinite blocking loop itself. This allows background
+ * timers and idle tasks to run even when the user is not typing.
  *
- * No command is special-cased here, including "help": the shell is a dumb reader and the registry is the whole language of the prompt.
-  * Never returns. Call it from kmain after ext_init_all(). */
+ * Call shell_tick() from kmain's main loop.
+ * Call shell_run() only if you want the legacy blocking behavior (e.g.,
+ * for a debugger prompt that absolutely must not be interrupted by timers).
+ */
+
+/* Initialize the shell state (clears buffers, resets prompt). */
+void shell_init(void);
+
+/* Non-blocking tick. Pass a character if one was read, or 0 if none.
+ * Returns true if the shell is actively waiting for a character,
+ * false if it just executed a command and the loop should maybe redraw. */
+void shell_tick(char c);
+
+/* Legacy blocking loop. Never returns. */
 __attribute__((noreturn))
 void shell_run(void);
 
