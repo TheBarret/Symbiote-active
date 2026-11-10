@@ -74,9 +74,23 @@ void kmain(void) {
     /* greeter */
     klog_info("Stage 2 complete (ext: %zu, sys: %zu)\n", ext_count(), cmd_count());
 
-    /* launch shell */
-    shell_run();
+    shell_init();               // init shell dispatcher
+    kprintf("\nType 'help' for a list of commands, ready when you are!\n");
+
+    for (;;) {
+        /* drain any scheduled timers (env sweep, top refresh, vm16 async, etc.) */
+        timer_drain();
+        /* poll for keyboard input without blocking */
+        char c = 0;
+        enum kbd_event ev = kbd_poll(&c);
+        if (ev == KBD_CHAR) {
+            shell_tick(c);
+        }
+        /* sleep until the next interrupt (timer or keyboard) */
+        cpu_sti_hlt();
+    }
 
     /* shouldn't happen but just in case, to avoid fallthroughs */
     cpu_halt_forever();
+
 }
