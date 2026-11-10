@@ -6,68 +6,23 @@
 #include <core/arch/cpu.h>
 #include <core/dev/keyboard.h>
 #include <core/dev/console.h>
+#include <core/dev/timer.h>
 #include <core/cmd.h>
 #include <core/kprintf.h>
 #include <core/shell.h>
 
-
-// Moved to ref: core/version.h
-//#define SHELL_LINE_MAX  128
-
-/* argv[0] is the command name; the rest are its arguments.
- * So thetokenizer's cap is one more than the maximum argument count a command may declare. */
 #define SHELL_ARG_MAX   (CMD_MAX_ARGS + 1)
 
-/*  line input  */
+/*  state  */
 
-/* Read one line from the keyboard into buf (up to cap-1 chars).
- * Handles backspace and echoes as it goes.
- *
- * Returns the length on Enter, or (size_t)-1 if the line was aborted (Ctrl-C). An empty line returns 0. */
-static size_t read_line(char *buf, size_t cap) {
-    size_t len = 0;
-    for (;;) {
-        int c = kbd_getchar();
-
-        if (c == '\n' || c == '\r') {
-            console_putc('\n');
-            break;
-        }
-
-        if (c == 0x03) {            /* Ctrl-C: abandon the line */
-            console_putc('\n');
-            return (size_t)-1;
-        }
-
-        if (c == '\b' || c == 0x7F) { /* Backspace / DEL */
-            if (len > 0) {
-                len--;
-                console_putc('\b');
-                console_putc(' ');
-                console_putc('\b');
-            }
-            continue;
-        }
-
-        if (c < 0x20 || c > 0x7E)
-            continue;
-
-        if (len + 1 >= cap)
-            continue;
-
-        buf[len++] = (char)c;
-        console_putc((char)c);
-    }
-    buf[len] = '\0';
-    return len;
-}
+static char   line_buf[SHELL_LINE_MAX];
+static size_t line_len;
+static bool   prompt_shown;
 
 /*  tokenizer  */
 
 /* Split line in place into argv. Returns argc, or -1 if the line has more than `max` words.
- *
- * On success, argv[argc] is set to NULL so callers that want a NULL-terminated vector (rather than an (argc, argv) pair) can use it.
- * The caller must provide argv with room for max + 1 entries. */
+ * On success, argv[argc] is set to NULL. */
 static int tokenize(char *line, char **argv, int max) {
     int argc = 0;
     char *p = line;
@@ -89,43 +44,92 @@ static int tokenize(char *line, char **argv, int max) {
 /*  one line  */
 
 static void run_line(char *line) {
-    /* One extra slot for the NULL terminator that tokenize installs. */
     char *argv[SHELL_ARG_MAX + 1];
     int argc = tokenize(line, argv, SHELL_ARG_MAX);
     if (argc < 0) {
-        kprintf("Too many words (max=%d including the command name)\n",
-                SHELL_ARG_MAX);
+        kprintf("Too many words (max=%d including the command name)\n", SHELL_ARG_MAX);
         return;
     }
     if (argc == 0)
         return;
-
-    /* Everything, including help, goes through the registry. If nothing is registered under that name, cmd_dispatch reports it. */
     cmd_dispatch(argc, argv);
 }
 
-/*  the loop  */
+/*  public API  */
+
+void shell_init(void) {
+    line_len = 0;
+    prompt_shown = false;
+    line_buf[0] = '\0';
+}
+
+void shell_tick(char c) {
+    if (!prompt_shown) {
+        kprintf("> ");
+        prompt_shown = true;
+    }
+
+    if (c == 0) return; /* No character available, just yielding */
+
+    if (c == '\n' || c == '\r') {
+        console_putc('\n');
+        prompt_shown = false;
+        line_buf[line_len] = '\0';
+        run_line(line_buf);
+        line_len = 0;
+        return;
+    }
+
+    if (c == 0x03) { /* Ctrl-C */
+        console_putc('\n');
+        prompt_shown = false;
+        line_len = 0;
+        return;
+    }
+
+    if (c == '\b' || c == 0x7F) {
+        if (line_len > 0) {
+            line_len--;
+            console_putc('\b');
+            console_putc(' ');
+            console_putc('\b');
+        }
+        return;
+    }
+
+    if (c < 0x20 || c > 0x7E)
+        return;
+
+    if (line_len + 1 >= SHELL_LINE_MAX)
+        return;
+
+    line_buf[line_len++] = c;
+    console_putc(c);
+}
+
+/*  legacy blocking loop  */
 
 void shell_run(void) {
-    // Moved to: main.c
-    //if (!kbd_init()) {
-    //    kprintf("Error: no PS/2 keyboard detected!\n");
-    //    cpu_halt_forever();
-    //}
     int problems = cmd_selfcheck();
     if (problems) {
         kprintf("[Warning] %d issues detected in look-up table.\n", problems);
     }
     kprintf("\nType 'help' for a list of commands, ready when you are!\n");
 
-    char line[SHELL_LINE_MAX];
+    shell_init();
+
     for (;;) {
-        kprintf("> ");
-        size_t len = read_line(line, sizeof line);
-        if (len == (size_t)-1)
-            continue;               /* aborted with Ctrl-C */
-        if (len == 0)
-            continue;
-        run_line(line);
+        char c;
+        enum kbd_event ev = kbd_wait(&c);
+
+        /* In the blocking model, we still must drain timers so that
+         * scheduled tasks don't starve while waiting for a keystroke. */
+        timer_drain();
+
+        if (ev == KBD_CHAR) {
+            shell_tick(c);
+        }
+
+        cpu_sti_hlt();
     }
 }
