@@ -192,6 +192,11 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 - `core/mask.h`: added `env_mask_has()`; documented that `env_mask_flags()` returns shifted-down flags.
 - `core/dev/env.c`, `ext/envtool/`: `list_all` no longer lists `SECRET` entries. Use `list_match(ENV_Q_FLAG(ENV_FLAG_SECRET), …)` for a full diagnostic dump.
 
+- `core/main.c`: Replaced the blocking `shell_run()` call in `kmain()` with a centralized super-loop. The loop now unconditionally calls `timer_drain()`, polls the keyboard non-blockingly via `kbd_poll()`, feeds characters into the shell state machine, and yields with `cpu_sti_hlt()`. This fixes timer starvation when the shell is idle.
+- `core/shell.c`, `core/shell.h`: Converted the shell from a blocking `read_line` loop to a non-blocking state machine (`shell_tick`). The shell no longer owns the main CPU loop; it yields immediately if no input is available, allowing background tasks and timers to execute.
+- `core/tui.c`: Patched `tui_run()` to stop blocking on `kbd_wait()`. It now uses `kbd_poll()`, calls `timer_drain()` when idle, and uses `cpu_sti_hlt()` to yield the CPU. This prevents TUI applications (like `top` and `envtool`) from stalling the entire kernel and allows their refresh timers to fire reliably.
+- `core/dev/keyboard.c`: (Implicit) Shifted the `timer_drain()` responsibility out of the keyboard driver's blocking wait loop and into the kernel super-loop and TUI engine, decoupling hardware polling from scheduling.
+
 ## In-depth: 8259 PIC driver, Timer conversions
 
 `core/timer.h`, `core/timer.c`:  
