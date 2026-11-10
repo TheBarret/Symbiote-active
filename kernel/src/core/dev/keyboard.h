@@ -16,6 +16,8 @@
 #define KBD_LOCK_CAPS   0x01
 #define KBD_LOCK_NUM    0x02
 #define KBD_LOCK_SCROLL 0x04
+
+/* keyboard bus back-end */
 uint8_t  kbd_locks(void);
 uint32_t kbd_dropped(void);
 
