@@ -4,6 +4,8 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <core/arch/cpu.h>
+#include <core/dev/timer.h>
 #include <core/dev/keyboard.h>
 
 /* Text-based User Interface
