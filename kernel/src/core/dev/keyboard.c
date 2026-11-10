@@ -383,11 +383,11 @@ char kbd_getchar(void) {
         if (kbd_poll(&c) == KBD_CHAR)
             return c;
 
+        /* Just sleep until the next interrupt (timer OR keyboard).
+         * The super-loop in kmain() owns timer_drain(). */
         uint64_t flags = cpu_irq_save();
-        while (ring_empty()) {
+        if (ring_empty()) {
             cpu_sti_hlt();
-            cpu_cli();
-            timer_drain();
         }
         cpu_irq_restore(flags);
     }
@@ -399,10 +399,10 @@ enum kbd_event kbd_wait(char *out) {
         if (ev != KBD_NONE)
             return ev;
 
+        /* Just sleep until the next interrupt. */
         uint64_t flags = cpu_irq_save();
-        while (ring_empty()) {
+        if (ring_empty()) {
             cpu_sti_hlt();
-            cpu_cli();
         }
         cpu_irq_restore(flags);
     }
@@ -480,12 +480,10 @@ static void kbd_publish_snapshot(void) {
 
 static void kbd_publish_task(void *arg) {
     (void)arg;
-    kbd_publish_id = timer_after(KBD_PUBLISH_MS, kbd_publish_task, NULL);
-    //klog("kbd_publish: re-armed id=%d\n", kbd_publish_id);
 
+    /* Publish the snapshot first. */
     kbd_publish_snapshot();
-    //klog("kbd_publish: fired, keystrokes=%llu last_char=%c\n",
-    //    (unsigned long long)kbd_keystrokes_total,
-    //     kbd_last_char ? (char)kbd_last_char : '.');
 
+    /* Then re-arm for the next cycle. */
+    kbd_publish_id = timer_after(KBD_PUBLISH_MS, kbd_publish_task, NULL);
 }
