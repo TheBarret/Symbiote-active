@@ -259,7 +259,7 @@ static int sub_stat(int argc, const char *const *argv) {
     uint64_t now = now_ticks();
     uint64_t age = (now > st.last_access) ? now - st.last_access : 0;
     kprintf("  last access: %llu ms ago\n", (unsigned long long)ticks_to_ms(age));
-    kprintf("  importance : %u / %u (higher = evicted last)\n",
+    kprintf("  importance : %u / %u (0 = evicted first)\n",
             (unsigned)st.importance, (unsigned)ENV_IMPORTANCE_MAX);
     kprintf("  mask       : 0x%08x\n", (unsigned)st.mask);
     return CMD_OK;
