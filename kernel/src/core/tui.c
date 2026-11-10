@@ -5,6 +5,8 @@
 #include <lib/mem.h>
 #include <lib/string.h>
 #include <core/arch/heap.h>
+#include <core/arch/cpu.h>
+#include <core/dev/timer.h>
 #include <core/dev/keyboard.h>
 #include <core/dev/console.h>
 #include <core/dev/env.h>
@@ -342,14 +344,21 @@ void tui_run(struct tui_view *v) {
 
     for (;;) {
         char c = 0;
-        enum kbd_event ev = kbd_wait(&c);
+        enum kbd_event ev = kbd_poll(&c); /* Non-blocking read */
 
-        if (v->key && !v->key(v, ev, c))
-            return;
+        if (ev != KBD_NONE) {
+            /* A key was pressed. Process it. */
+            if (v->key && !v->key(v, ev, c))
+                return;
 
-        if (v->draw)
-            v->draw(v);
-        tui_flush();
+            if (v->draw)
+                v->draw(v);
+            tui_flush();
+        } else {
+            /* No key pressed. Yield the CPU so timers (like top's 100ms refresh) can run. */
+            timer_drain();
+            cpu_sti_hlt();
+        }
     }
 }
 
