@@ -145,20 +145,19 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 
 # Active changes & log 0.1.2 (LC-3, DEC)
 
-- `bus.c` publishes the full catalog of the bus registry: `kernel.dev.<name>.*`.
-- `fbcon` publishes console `column, row, width, height`: `kernel.dev.console.*`.
-- `tui.c` gained `tui_fetch_resolution()` and `CP437` support.
+- `core/bus.c` publishes the full catalog of the bus registry: `kernel.dev.<name>.*`.
+- `ext/fbcon/fbcon.c` publishes console `column, row, width, height`: `kernel.dev.console.*`.
+- `core/tui.c` gained `tui_fetch_resolution()` and `CP437` support.
 - `ext/env/env.c`, `ext/envtool/`: the `env` command-line tool, plus `envtool` inspection and stress testing, with `CP437` support.
 - `ext/fbcon/fbcon.c`: the terminal now uses the kernel's `heap->kmalloc` pool.
 - `ext/memory/md.c`: memory dump tool, safely scans memory in both directions without faulting.
-
   
-- `dev/keyboard.c` publishes keystroke vectors `keystrokes, chars, dropped, scancode, ticks, modifiers, last_char`: `kernel.dev.keyboard.*`.
-- `dev/timer.c` publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.
-- `dev/env.c`: fixed a memory leak in `env_set`'s overwrite-flag logic.
+- `core/dev/keyboard.c` publishes keystroke vectors `keystrokes, chars, dropped, scancode, ticks, modifiers, last_char`: `kernel.dev.keyboard.*`.
+- `core/dev/timer.c` publishes delta vectors `ticks, uptime_ms, hz`: `kernel.dev.timer.*`.
+- `core/dev/env.c`: fixed a memory leak in `env_set`'s overwrite-flag logic.
 - `ext/script/decimal.c`, `ext/script/vm16.c`: software-based decimals, and started with a LC-3-style 16-bit native VM extension.
 
-- `dev/keyboard.c`, `dev/keyboard.h`: patched with new `bus_ops` initializer table, exposing `locks` and `drops` capabilities.
+- `core/dev/keyboard.c`, `dev/keyboard.h`: patched with new `bus_ops` initializer table, exposing `locks` and `drops` capabilities.
 - `ext/script/decimal.c`, `ext/script/decimal.h`: patched and cleaned up.
 - `ext/script/vm16.c`, `ext/script/vm16.h`: continuation of first LC-3 functions, has its own bus address and `bus_ops` capabilities.
 
@@ -172,19 +171,33 @@ The debug build (`-DSYM_MEMDEBUG`) adds header magic, poison on free and alloc, 
 
 - `ext/script/decimal.c`, `ext/script/test.c`, `ext/script/vm16.c`: refactored, patched `DEC_CMP` with `FAULT` logic.
 
-- `version.c`: bumped up to `0.1.2`, major changes: `LC-3` and `Decimal` features, added testers;
+- `core/version.c`: bumped up to `0.1.2`, major changes: `LC-3` and `Decimal` features, added testers;
 	* `dec_selftest()`
     * `vm16_decimal_integration_test()`
 	* `vm16_decimal_fault_test()`
  	* `vm16_decimal_setget_test()`
 
-- `dev/env.c` added device-level aggregate bitmask (`active_mask_or`) within struct `env_device` to support `O(1)` short-circuit evaluation  
+- `core/dev/env.c` added device-level aggregate bitmask (`active_mask_or`) within struct `env_device` to support `O(1)` short-circuit evaluation  
    for mask-based queries (`env_list_by_mask` and `env_count_by_mask`), integrated automatic recalculation hooks into `env_set()` and `env_reclaim()`
    to maintain bitfield synchronization without iterative overhead during read paths.
 
+- `core/dev/env.c`: fixed a memory leak in `env_set`'s overwrite-flag logic.
+- `core/dev/env.c`: **`READONLY` and `PINNED` are now actually enforced** on overwrite. The gate previously tested the shifted `env_mask_flags()` value against the unshifted `ENV_FLAG_*` constants and could never fire.
+- `core/dev/env.c`: aggregate mask is now an **exact index** (`bit_cnt`, `owner_cnt`, `type_cnt`, `active_mask_or`) maintained in `O(1)` on every set and reclaim. The `mask_dirty` flag and the lazy recompute scan are removed.
+- `core/dev/env.h`: new **care/want queries**, `list_match` / `count_match`, plus `ENV_Q_OWNER` / `ENV_Q_TYPE` / `ENV_Q_FLAG` in `mask.h`. `OWNER` and `TYPE` are numbers, so the old subset-style `*_by_mask` calls misreported them (owner 1 matched owners 3, 5, 7). The legacy calls remain, documented as flag/private-bit only. New ops are appended to `env_ops`, so existing consumers are unaffected.
+- `core/dev/env.c`: **`set()` is all-or-nothing.** Strings are staged first, then eligible space is proven before anything is evicted. A failed write (`ENV_NO_SPACE`, `ENV_READONLY`, heap exhaustion) no longer evicts other entries.
+- `core/dev/env.c`: eviction respects the incoming write's importance (only entries with importance ≤ the write's are eligible), and `CACHEABLE` entries are evicted before non-cacheable ones of equal importance.
+- `core/dev/env.c`: `SECRET` is now honored: hidden from `list`, `list_all` and from queries whose `care` omits the bit.
+- `core/dev/env.c`: an expired entry under a re-set key is reclaimed on the spot (one live slot per key); TTL arithmetic saturates instead of wrapping.
+- `core/dev/env.c`: `env_init()` ignores a second call with a warning; a failed `bus_register` is logged.
+- `core/mask.h`: added `env_mask_has()`; documented that `env_mask_flags()` returns shifted-down flags.
+- `core/dev/env.c`, `ext/envtool/`: `list_all` no longer lists `SECRET` entries. Use `list_match(ENV_Q_FLAG(ENV_FLAG_SECRET), …)` for a full diagnostic dump.
+
 ## In-depth: 8259 PIC driver, Timer conversions
 
-- `core/timer.h`, `core/timer.c`: overflow-safe millisecond→tick conversions with an explicit rounding policy at every call site.
+`core/timer.h`, `core/timer.c`:  
+
+overflow-safe millisecond→tick conversions with an explicit rounding policy at every call site.  
   - `ms_to_ticks_floor`, largest tick count ≤ `ms`
   - `ms_to_ticks_ceil`, smallest tick count ≥ `ms`
   - `ms_to_ticks_round`, nearest tick count
@@ -194,19 +207,21 @@ All three saturate on overflow, and treat `hz == 0` as "timer not initialized" (
 
 ## In-depth: Environment Storage, Bus Registry, Manifest and Device Discovery
 
-`core/env.c`, `core/env.h`, `core/mask.h`, `core/bus.c`:  
-The environment device is a bounded, fixed-capacity store of `(namespace, name) → value` entries, registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
+`core/dev/env.c`, `core/dev/env.h`, `core/mask.h`, `core/bus.c`:  
+The environment device is a bounded, fixed-capacity store of `(namespace, name) → value | [mask-contract]` entries,  
+registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.  
 
 <img width="1286" height="863" alt="Screenshot_2026-11-06_23-04-0833" src="https://github.com/user-attachments/assets/e0183475-a18f-4b84-88ac-85c97c193578" />  
-
 
 Per-entry policy:  
 
 - **access budget**, reclaimed synchronously when exhausted
 - **time budget (TTL)**, reclaimed asynchronously by a timer-driven sweeper  
-(60,000 ticks at 1000 Hz is exactly 60 seconds, one minute)
-- **importance**, eviction order under space pressure (0–10, between persistent and volatile caches)
-- **mask**, free-form classification bits, searchable via `list_by_mask` / `count_by_mask`
+	(60,000 ticks at 1000 Hz is exactly 60 seconds, one minute).  
+	Reads are exact whether or not the sweeper has run: an expired entry always reads as absent.  
+    The TTL saturates, so it can never wrap into "already expired".  
+- **importance**, `0–10`, higher is more valuable; it decides who may be evicted under space pressure
+- **mask**, a 32-bit classification field that env enforces in part (the flags) and otherwise never interprets
 
 `mask.h` defines the 32-bit field layout:
 
@@ -241,32 +256,69 @@ Per-entry policy:
 #define ENV_FLAG_PINNED        (1u << 19)  /* policy: immune to space-pressure eviction */
 ```
 
+### Flag semantics
+
+| Flag | Enforced behavior |
+|------|-------------------|
+| `READONLY` | Once set, the entry can never be overwritten, by anyone, the owner included. |
+| `PINNED` | Never chosen as an eviction victim while live. Only the **owner** (the writer's mask owner must equal the entry's) may overwrite it. |
+| `SECRET` | Hidden from `list`, `list_all`, and any query whose `care` does not include the `SECRET` bit. Reads by exact name are **not** hidden: env is not an access-control system, so anything exposing env to untrusted code (the proxy) must gate it. |
+| `CACHEABLE` | Safe to recompute: evicted before non-cacheable entries of the same importance. |
+
 > **Remark:**  
-> `FLAGS` bits (notably `READONLY`, `PINNED`) are one-shot writes, with one exception: for `PINNED`,  
-> only the owner of the object may modify this value or its parameters, though it can still be `unset` (erased).  
+> `unset` is deliberately **not** gated by `READONLY` or `PINNED`: env cannot see who is calling, so a pinned entry "can still be unset (erased)".  
+> The same goes for `drop_namespace`, which is core-only. Callers that face untrusted code must apply their own ownership gate (the proxy does).  
+> An entry whose TTL has expired is gone for policy purposes too: its key may be claimed again.
 
-**Mask aggregate optimizing:**  
+### Eviction and failed writes
 
-The `env` aggregate mask tracks active entry bits via a bitwise OR reduction (`active_mask_or`).  
-To prevent write-path overhead, additions maintain the aggregate incrementally in `O(1)` time (as OR operations are monotone),  
-while deletions and reclamations mark the state dirty (`mask_dirty = true`), deferring full recomputations lazily until an explicit mask query occurs (`env_mask_refresh`).
+When the store is full, victims are preferred in this order:
 
-Because `mask.h` partitions the 32-bit field into distinct functional segments, this structure optimizes queries across specific bit ranges:  
+1. **expired** entries (even `PINNED` ones: the TTL already won)
+2. **lowest importance**, but only entries with importance **≤ the incoming write's** are eligible, so a low-importance write can never displace a more valuable entry
+3. **`CACHEABLE`** before non-cacheable
+4. **least recently accessed**, then name order
 
-1. **Owner Range (Bits 31..24)**
-* **Function:** Identifies the owning bus extension ID.
-* **Interaction:** When a query targets a specific owner ID  
-   (e.g., checking if any entries exist for a decommissioned or uninitialized driver),  
-   evaluating `(active_mask_or & query_mask) != query_mask` immediately bypasses the `O(N)` linear scan if that owner's bits are absent from the entire store.  
+Live `PINNED` entries are never victims. A `set()` is **all-or-nothing**: the strings are staged first, then the store proves that enough *eligible* space exists, and only then evicts. A write that cannot succeed (`ENV_NO_SPACE`, `ENV_READONLY`, or heap exhaustion) leaves the store exactly as it was; it never costs another entry its slot.
 
-2. **Type Range (Bits 23..20)**
-* **Function:** Specifies data typing hints (e.g., `ENV_TYPE_INT`, `ENV_TYPE_PATH`).  
-* **Interaction:** Queries filtering by type tags benefit from immediate negative results when an entire data type is unpopulated in the environment space.
+### Querying by mask
 
-3. **Flags and Private Ranges (Bits 19..0)**
-* **Function:** Universal core policies (`Readonly, Pinned, Secret, Cacheable`) and 16-bit private extension flags.
-* **Interaction:** Composite queries requiring specific flag combinations (such as searching for pinned secrets)  
-  short-circuit instantly if the aggregate OR mask lacks the required intersecting bits.  
+There are two query forms, and they are **not** interchangeable:
+
+- **care/want (exact)**: matches entries where `(mask & care) == want`. This is the correct way to query `OWNER` and `TYPE`, which are *numbers*, not bitsets.
+- **subset (legacy)**: `list_by_mask` / `count_by_mask` match entries whose mask contains *all* bits of the query. This is only meaningful for `FLAGS` and `PRIVATE` bits: as a subset test, owner `1` also matches owners `3`, `5` and `7`.
+
+`mask.h` provides `ENV_Q_OWNER(id)`, `ENV_Q_TYPE(t)` and `ENV_Q_FLAG(f)`, each of which expands to the `(care, want)` pair:
+
+```c
+const struct env_ops *env = bus_env();
+size_t n;
+
+env->count_match(ENV_Q_OWNER(BUS_VM16), &n);        /* exactly the entries owned by vm16 */
+env->count_match(ENV_Q_TYPE(ENV_TYPE_INT), &n);     /* exactly the int-typed entries */
+env->count_match(ENV_Q_FLAG(ENV_FLAG_PINNED), &n);  /* pinned entries */
+```
+
+Test flags with `env_mask_has(mask, ENV_FLAG_PINNED)`. `env_mask_flags()` returns the flags *shifted down* to `0..15` and must not be compared against the unshifted `ENV_FLAG_*` constants.
+
+### Mask index
+
+The store keeps an exact, incrementally maintained index of what is in it:
+
+| Counter | Meaning |
+|---------|---------|
+| `bit_cnt[32]` | number of entries with each mask bit set |
+| `active_mask_or` | the exact OR of every live mask (bit `b` is set ⇔ `bit_cnt[b] > 0`) |
+| `owner_cnt[256]` | number of entries per `OWNER` value |
+| `type_cnt[16]` | number of entries per `TYPE` value |
+
+Every `set` and every reclaim updates these in `O(1)` per set bit, so the index is **never stale and never rescanned**: there is no dirty flag. A query is rejected in `O(1)`, without touching a single entry, when:
+
+1. any bit of `want` is absent from `active_mask_or`, or
+2. the query fully specifies `OWNER` and `owner_cnt[owner] == 0`, or
+3. the query fully specifies `TYPE` and `type_cnt[type] == 0`.
+
+For example, "does anything still exist for a decommissioned driver?" is one array lookup. The index is a **filter, never an answer**: entries that have expired but are not yet swept are still counted, so a non-zero counter means "a scan is required" and a zero counter means "provably nothing matches". It can cost a scan; it can never return a wrong result.
 
 ## In-depth: Software-based Decimals
 
