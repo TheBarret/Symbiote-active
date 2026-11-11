@@ -43,6 +43,7 @@ static void frames_mark_used(size_t frame, size_t count) {
 
 /*  init  */
 
+/* trusts Limine's map to be well-formed (no base+length overflow). */
 static uint64_t find_highest_usable(struct limine_memmap_response *map) {
     uint64_t highest = 0;
     for (size_t i = 0; i < map->entry_count; i++) {
@@ -91,6 +92,10 @@ static void reserve_special_regions(struct limine_memmap_response *map) {
 }
 
 void pmm_init(void) {
+    if (total_frames != 0) {
+        klog_warning("pmm_init called twice\n");
+        return;
+    }
     if (!boot_memory_ok())
         PANIC("Bootloader did not provide (memory) memmap or hhdm");
 
@@ -220,8 +225,12 @@ void pmm_free(uint64_t phys, size_t count) {
 
     for (size_t i = 0; i < count; i++) {
         size_t f = start + i;
-        if (!frame_is_used(f))
+        if (!frame_is_used(f)) {
+#ifdef SYM_MEMDEBUG
+            klog_warning("pmm_free: frame %zu already free\n", f);
+#endif
             continue;
+        }
         frame_mark_free(f);
         free_frames++;
     }

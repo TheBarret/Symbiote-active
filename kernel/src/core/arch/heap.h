@@ -21,11 +21,11 @@
 
  * */
 
-void heap_init(void);                        /* panics if PMM has no frames */
+void heap_init(void);                        /* panics if PMM has no frames; double-call is warn-no-op */
 void *kmalloc(size_t size);                  /* 16-aligned, NULL on fail, undefined contents */
 void *kzalloc(size_t size);                  /* zeroed, NULL on fail */
-void kfree(void *ptr);                       /* NULL is no-op; double-free/corruption panics */
-void *krealloc(void *ptr, size_t new_size);  /* NULL->kmalloc, 0->kfree+NULL, fail leaves original */
+void kfree(void *ptr);                       /* NULL is no-op; double-free is detected and panics in all builds (b->free check); header corruption only under -DSYM_MEMDEBUG */
+void *krealloc(void *ptr, size_t new_size);  /* NULL->kmalloc, 0->kfree+NULL, on failure the original block remains allocated and unmodified; a shrink that fits returns the same pointer and does not shrink the block */
 
 struct heap_stats {
     size_t chunks;

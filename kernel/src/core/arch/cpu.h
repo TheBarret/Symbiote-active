@@ -61,7 +61,8 @@ static inline uint32_t inl(uint16_t port) {
     return val;
 }
 
-/* Read `count` 16-bit words from a port into memory (ATA PIO uses this). */
+/* Read `count` 16-bit words from a port into memory (ATA PIO uses this).
+ * void* drops volatile; callers doing volatile MMIO must use inline asm directly. */
 static inline void insw(uint16_t port, void *addr, uint64_t count) {
     __asm__ volatile ("rep insw" : "+D"(addr), "+c"(count) : "d"(port) : "memory");
 }
@@ -173,7 +174,7 @@ __attribute__((noreturn))
 static inline void cpu_halt_forever(void) {
     cpu_cli();
     for (;;)
-        __asm__ volatile ("hlt");
+        __asm__ volatile ("hlt" ::: "memory");
 }
 
 /*
@@ -183,7 +184,7 @@ static inline void cpu_halt_forever(void) {
 static inline void cpuid(uint32_t leaf, uint32_t subleaf,
                          uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d) {
     __asm__ volatile ("cpuid" : "=a"(*a), "=b"(*b), "=c"(*c), "=d"(*d)
-                              : "a"(leaf), "c"(subleaf));
+                              : "a"(leaf), "c"(subleaf) : "memory");
 }
 
 #endif

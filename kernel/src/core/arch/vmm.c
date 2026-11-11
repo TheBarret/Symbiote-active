@@ -197,6 +197,8 @@ bool vmm_map(uint64_t virt, uint64_t phys, uint64_t flags) {
         return false;
     if (*pte & PTE_PRESENT)
         return false;
+    if (phys & ~PTE_ADDR_MASK)
+        return false;
 
     *pte = (phys & PTE_ADDR_MASK) | flags_to_pte(flags);
     invlpg((void *)virt);

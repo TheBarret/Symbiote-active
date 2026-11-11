@@ -14,9 +14,11 @@
  * Huge pages inherited from Limine (HHDM) are left intact; do not try to map/unmap inside those ranges.
  * No locking, same single-threaded boot assumption as the PMM. */
 
-/* PTE flag bits passed to vmm_map / vmm_protect. Present is always implied. */
+/* Internal interface bits for vmm_map / vmm_protect — not architectural PTE positions.
+ * Real PTE bits: RW=1, US=2, PCD=4, G=8, NX=63. vmm_map / vmm_protect translate these.
+ * Present is always implied. */
 #define VMM_WRITE   (1ull << 0)
-#define VMM_USER    (1ull << 1)
+#define VMM_USER    (1ull << 1)  /* known limitation: ineffective on newly created mappings — walk_pte(create=true) allocates supervisor-only intermediates; forward: propagate USER up the walk */
 #define VMM_NX      (1ull << 2)
 #define VMM_GLOBAL  (1ull << 3)
 
@@ -36,11 +38,14 @@
 void vmm_init(void);
 
 /* Map one 4 KiB page: virt -> phys with the given flags.
- * Returns false if the VA is already mapped, misaligned, or tables cannot be allocated. */
+ * Returns false if the VA is already mapped, misaligned, phys has bits outside the PTE address field, or tables cannot be allocated.
+ * An address inside an inherited Limine huge page is refused (return false), not split. */
 bool vmm_map(uint64_t virt, uint64_t phys, uint64_t flags);
 
 /* Remove the mapping at virt. Does not free the physical frame.
- * Returns false if there was no 4 KiB mapping (missing or huge). */
+ * Returns false if there was no 4 KiB mapping (missing or huge).
+ * An address inside an inherited Limine huge page is refused (return false), not split.
+ * Does not free now-empty intermediate page tables. */
 bool vmm_unmap(uint64_t virt);
 
 /* Change flags on an existing 4 KiB mapping. Physical address is unchanged. */

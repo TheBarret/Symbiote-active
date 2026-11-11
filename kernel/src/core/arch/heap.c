@@ -78,8 +78,7 @@ static struct chunk *chunk_create(size_t payload_bytes) {
     c->next = NULL;
 
     struct block_header *first = (struct block_header *)(base + CHUNK_HDR_SIZE);
-    // not good, wastes 16 bytes
-    //size_t first_size = (c->size - CHUNK_HDR_SIZE) & ~(size_t)(HEAP_ALIGN - 1);
+    // reserve HDR_SIZE for the sentinel so first + first_size + HDR_SIZE == chunk end
     size_t first_size = (c->size - CHUNK_HDR_SIZE - HDR_SIZE) & ~(size_t)(HEAP_ALIGN - 1);
 
     first->size = first_size;
@@ -104,6 +103,10 @@ static struct chunk *chunk_create(size_t payload_bytes) {
 }
 
 void heap_init(void) {
+    if (chunks_head != NULL) {
+        klog_warning("heap_init called twice\n");
+        return;
+    }
     chunks_head = NULL;
     if (chunk_create(0) == NULL)
         PANIC("heap: cannot allocate initial chunk");
@@ -264,6 +267,7 @@ void *krealloc(void *ptr, size_t new_size) {
         return NULL;
     size_t new_payload = (new_size + HEAP_ALIGN - 1) & ~(size_t)(HEAP_ALIGN - 1);
 
+    /* Shrink that fits: return same pointer; do not shrink the block. */
     if (new_payload <= old_payload)
         return ptr;
 

@@ -34,7 +34,8 @@
  */
 
 /* Initialize from the bootloader's memory map and HHDM.
- * Panics if the map or HHDM is missing, or if there is no usable region big enough to hold the bitmap. */
+ * Panics if the map or HHDM is missing, or if there is no usable region big enough to hold the bitmap.
+ * Double-call is warn-no-op. */
 void pmm_init(void);
 
 /* Allocate one 4 KiB frame. Returns its physical address, or 0 if no frame is available.
@@ -42,6 +43,7 @@ void pmm_init(void);
 uint64_t pmm_alloc(void);
 
 /* Allocate `count` consecutive frames. Returns the physical address of the first, or 0 on failure.
+ * First frame is 4 KiB-aligned; no larger alignment is guaranteed.
  * Used by the heap for chunk allocation. */
 uint64_t pmm_alloc_contig(size_t count);
 
@@ -57,7 +59,7 @@ uint64_t pmm_virt_to_phys(const void *virt);
 /* Statistics. Both fields are counted in frames. */
 struct pmm_stats {
     size_t total_frames;    /* frames the bitmap covers */
-    size_t free_frames;     /* frames currently free */
+    size_t free_frames;     /* exact incrementally-maintained free-frame count */
 };
 struct pmm_stats pmm_get_stats(void);
 
