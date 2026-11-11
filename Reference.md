@@ -241,7 +241,7 @@ If you store your own type, use `ENV_Q_*`-friendly bit patterns and document the
 
 Two query forms exist, and **they are not interchangeable**:  
 
-### Care/want, exact, use this for `OWNER` and `TYPE` (Good)
+### Care/want, exact, use this for `OWNER` and `TYPE`
 
 ```c
 size_t n;
@@ -262,7 +262,7 @@ while (env->list_match(ENV_Q_OWNER(BUS_VM16), /* want */ BUS_VM16 << 24,
 > Combining terms: OR the **care** halves and OR the **want** halves yourself.  
 > OR-ing two `ENV_Q_FLAG` terms requires **both** flags (AND), not "either."  
 
-### Subset match, legacy, flags and private bits only (Wrong)
+### Subset match, legacy, flags and private bits only
 
 ```c
 env->list_by_mask(ENV_FLAG_PINNED, &it, ...);   /* correct: flag bits */
