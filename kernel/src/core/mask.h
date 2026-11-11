@@ -100,9 +100,10 @@ static inline bool env_mask_has(uint32_t mask, uint32_t flag) {
 /* Query helpers. Each expands to TWO arguments, (care, want), so:
  *   env->count_match(ENV_Q_OWNER(BUS_VM16), &n);
  *   env->count_match(ENV_Q_FLAG(ENV_FLAG_PINNED), &n);
- * Combine several terms by OR-ing the care halves and the want halves yourself. */
-#define ENV_Q_OWNER(id)  ENV_MASK_OWNER_MASK, ((uint32_t)(id) << ENV_MASK_OWNER_SHIFT)
-#define ENV_Q_TYPE(t)    ENV_MASK_TYPE_MASK,  ((uint32_t)(t)  << ENV_MASK_TYPE_SHIFT)
+ * Combine several terms by OR-ing the care halves and the want halves yourself.
+ * OR-ing two ENV_Q_FLAG terms requires both flags (care = f1|f2, want = f1|f2); it is not "either." */
+#define ENV_Q_OWNER(id)  ENV_MASK_OWNER_MASK, (((uint32_t)(id) & 0xFFu) << ENV_MASK_OWNER_SHIFT)
+#define ENV_Q_TYPE(t)    ENV_MASK_TYPE_MASK,  (((uint32_t)(t) & 0xFu) << ENV_MASK_TYPE_SHIFT)
 #define ENV_Q_FLAG(f)    (f), (f)
 
 /* Type to String (for diagnostic tools) */

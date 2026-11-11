@@ -42,6 +42,7 @@
 /* owner_id = config.h = authoritative owner ID table  */
 /* not the same thing as: */
 /* class = bus.h = bus classification ID table */
+/* These are three different things (owner_id → env-mask OWNER; class → bus classification; TYPE → env-mask TYPE); the numeric values 0–9 colliding is coincidental. */
 /* expected to be hardcoded vectors */
 enum bus_class {
     BUS_CLASS_NONE     = 0,   /* default */
@@ -53,6 +54,7 @@ enum bus_class {
     BUS_CLASS_VM16     = 6,   /* vm16 module */
     BUS_CLASS_PROXY    = 7,   /* proxy module */
     BUS_CLASS_KEYBOARD = 8,   /* kbd module */
+    BUS_CLASS_STAT     = 9,   /* stats module */
 };
 
 struct bus_device {
@@ -97,7 +99,11 @@ int bus_test(const char *name);
 const struct bus_device *bus_find(const char *name);
 const struct bus_device *bus_find_class(enum bus_class class, size_t index);
 
-/* Typed finders */
+/* Typed finders — ops must point to a struct matching class; the bus does not verify this. */
+struct console_ops;
+struct timer_ops;
+struct env_ops;
+struct vfs_ops;
 const struct console_ops *bus_console(void);
 const struct timer_ops *bus_timer(void);
 const struct env_ops *bus_env(void);
@@ -113,7 +119,9 @@ static inline uint8_t bus_owner_id(const struct bus_device *dev) {
     return (dev != NULL) ? dev->owner_id : (uint8_t)BUS_KERN_ID;
 }
 
+/* Runs once at end of second wave, before shell; other contexts are a bug (code doesn't enforce). */
 void bus_settle(void);
+/* Writes READONLY | PINNED under owner BUS_BUS_ID; single-shot (warn-no-op on repeat); best-effort, failures logged not propagated. */
 void bus_publish_manifest(void);
 
 #endif

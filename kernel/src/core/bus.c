@@ -1,3 +1,4 @@
+#include "klog.h"
 #include <stddef.h>
 #include <lib/string.h>
 #include <core/dev/console.h>
@@ -21,15 +22,18 @@
 static struct bus_device bus_table[BUS_MAX_DEVICES];
 static size_t bus_used;
 static bool   bus_ready;
+static bool   manifest_published;
 
 void bus_init(void) {
+    bus_ready = false;
+    manifest_published = false;
     for (size_t i = 0; i < BUS_MAX_DEVICES; i++) {
         bus_table[i].name = NULL;
         bus_table[i].class = BUS_CLASS_NONE;
         bus_table[i].version = 0;
         bus_table[i].ops = NULL;
         bus_table[i].private_data = NULL;
-        bus_table[i].owner_id = BUS_BUS_ID;
+        bus_table[i].owner_id = BUS_KERN_ID;
     }
     bus_used = 0;
     klog_bus("Initialized (max=%u)\n", BUS_MAX_DEVICES);
@@ -130,15 +134,21 @@ void bus_settle(void) {
 }
 
 void bus_publish_manifest(void) {
+    if (manifest_published) {
+        klog_warning("bus_publish_manifest called twice\n");
+        return;
+    }
     const struct env_ops *env = bus_env();
     if (env == NULL) return;
 
     for (size_t i = 0; i < bus_used; i++) {
         const struct bus_device *dev = &bus_table[i];
+
         int ret_value;
         char ns[64];
         ksnprintf(ns, sizeof(ns), "kernel.dev.%s", dev->name);
-        uint32_t m = env_mask_build((uint16_t)dev->owner_id, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
+        /* Bus owns its manifest: writer == owner so PINNED's owner-check stays consistent on any future re-publish. */
+        uint32_t m = env_mask_build((uint16_t)BUS_BUS_ID, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
 
         /* ID */
         char buf_id[16];
@@ -161,5 +171,6 @@ void bus_publish_manifest(void) {
         /* validate */
         if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
     }
+    manifest_published = true;
     //klog_env("→ bus manifest published: kernel.dev.*\n");
 }
