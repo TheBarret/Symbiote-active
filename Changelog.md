@@ -89,4 +89,9 @@
 
 - `ext/explorer/explorer.c`: patched with extra panel, for file contents.
 - `core/env.c`, `core/bus.c`, `core/tui.c`, `ext/fbcon/fbcon_manifest.c`: refined manifest `namespace` symbols to shorter versions for clarity (ex. `kernel.dev.console => console`)
- 
+- `core/dev/timer.c`, `core/dev/timer.h`: patched to expose `task` metric values.
+- `ext/envtool/envtool.c`: remastered as stand-alone inspection tool.
+- `ext/stresser/stresser.c`, `ext/stresser/stresser.h`: added as stand-alone stress tool.
+- `core/dev/metric.c`, `core/dev/metric.h`: added `timer` endpoints , `task_pending, task_active`.
+
+---
