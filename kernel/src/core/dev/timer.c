@@ -272,7 +272,7 @@ void timer_init(uint32_t hz) {
     if (irq_register(0, timer_irq, NULL) != 0)
         PANIC("timer: IRQ0 already taken");
     inited = true;
-    klog("→ timer_init(freq=%u hz, irq=0, channel=0, mode=2)\n", hz);
+    klog("→ timer_init(freq_hz=%u, irq=0, channel=0, mode=2)\n", hz);
 
     struct bus_device dev = {
         .name         = "timer",
@@ -300,4 +300,22 @@ uint64_t timer_ticks(void) {
 
 uint64_t uptime_ms(void) {
     return ticks * divisor * 1000ull / PIT_FREQ;
+}
+
+uint64_t timer_divisor(void) {
+    return divisor;
+}
+
+size_t timer_tasks_active(void) {
+    size_t n = 0;
+    for (size_t i = 0; i < TIMER_MAX_TASKS; i++)
+        if (tasks[i].id != 0) n++;
+    return n;
+}
+
+size_t timer_tasks_pending(void) {
+    size_t n = 0;
+    for (size_t i = 0; i < TIMER_MAX_TASKS; i++)
+        if (tasks[i].active && tasks[i].ready) n++;
+    return n;
 }
