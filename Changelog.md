@@ -82,3 +82,10 @@
   - `ext/script/decimal.c`: `udivmod128` now early-returns on `d == 0` (defensive; all current callers pre-check, matches the boundary-defense pattern); `dec_align` now validates `dec_valid(a) && dec_valid(b)` at the top (public entry point, header says inputs must have `ok == true`); corrected the `dec_cmp` fallback comment ("scale gaps <= 18 (`DEC_MAX_SCALE`)", was "<= 10^18"); corrected `dec_get`'s buffer-size comment ("19 digits + sign + NUL = 21", was "20 … 22").
 
 - `ext/explorer/explorer.c`: re-added vfs browser back from older `0.1.0` codebase.
+
+- `config.h`, `core/`, `core/arch/`: codebase seen some minor tweaks and refinements, added new `class` and `id` definition.
+- `core/dev/metric.c`, `core/dev/metric.h`: added new metric service, uses `vfs.c` as endpoints, uses `env` to publish file locations (like Linux `/proc` concept).
+
+
+
+ 
