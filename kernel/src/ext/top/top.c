@@ -19,7 +19,7 @@
  *
  *  v1: all panels populated. Snapshot discipline active.
  *
- *  Refresh: 1300 ms via timer_after. Coprime with ENV_SWEEP_PERIOD_MS (1000)
+ *  Refresh: `n` ms via timer_after. Coprime with ENV_SWEEP_PERIOD_MS (1000)
  *  and TIMER_PUBLISH_MS (250), so `top`'s drain cannot phase-lock with the
  *  env sweeper or the timer publisher. Draw reads `prev`, never live state,
  *  so each frame is internally consistent and cannot reflect its own draw cost.
@@ -29,7 +29,7 @@
  *    - device scroll   (device count fits panel today; add v2 if it doesn't)
  */
 
-#define TOP_REFRESH_MS  1300u
+#define TOP_REFRESH_MS  2600u
 #define TOP_IRQ_LINES   16
 
 struct top_snapshot {
@@ -45,15 +45,6 @@ struct top_snapshot {
 
     size_t dev_count;                          /* cached bus_count()       */
     struct bus_device dev[BUS_MAX_DEVICES];    /* copy, not pointer        */
-
-    /* keyboard counters, env-published; parsed into u64 at capture time */
-    uint64_t kbd_keystrokes;
-    uint64_t kbd_chars;
-    uint64_t kbd_dropped;
-    uint64_t kbd_ticks;
-    uint64_t kbd_scancode;
-    uint64_t kbd_last_char;
-    uint64_t kbd_modifiers;
 };
 
 struct top_state {
@@ -62,28 +53,6 @@ struct top_state {
     struct top_snapshot now;          /* last captured */
     struct top_snapshot prev;         /* one cycle behind; the panel displays this */
 };
-
-/*  env helpers  */
-
-static uint64_t env_get_u64(const struct env_ops *env,
-                            const char *ns, const char *name, uint64_t fallback) {
-    if (env == NULL || ns == NULL || name == NULL)
-        return fallback;
-
-    struct env_stat st;
-    if (env->stat(ns, name, &st) != ENV_OK)
-        return fallback;
-
-    char buf[32];
-    size_t len = 0;
-    if (env->peek(ns, name, buf, sizeof buf, &len) != ENV_OK)
-        return fallback;
-
-    uint64_t v = 0;
-    if (!kstrtoull(buf, &v))
-        return fallback;
-    return v;
-}
 
 /*  snapshot capture  */
 
@@ -99,17 +68,7 @@ static void capture(struct top_snapshot *s) {
     s->heap = heap_get_stats();
 
     const struct env_ops *env = bus_env();
-    if (env) {
-        (void)env->info(&s->env);
-
-        s->kbd_keystrokes = env_get_u64(env, "kernel.dev.keyboard", "keystrokes", 0);
-        s->kbd_chars      = env_get_u64(env, "kernel.dev.keyboard", "chars",      0);
-        s->kbd_dropped    = env_get_u64(env, "kernel.dev.keyboard", "dropped",    0);
-        s->kbd_ticks      = env_get_u64(env, "kernel.dev.keyboard", "ticks",      0);
-        s->kbd_scancode   = env_get_u64(env, "kernel.dev.keyboard", "scancode",   0);
-        s->kbd_last_char  = env_get_u64(env, "kernel.dev.keyboard", "last_char",  0);
-        s->kbd_modifiers  = env_get_u64(env, "kernel.dev.keyboard", "modifiers",  0);
-    }
+    if (env) { (void)env->info(&s->env); }
 
     for (int i = 0; i < TOP_IRQ_LINES; i++)
         s->irq[i] = irq_get_info(i);
@@ -158,10 +117,10 @@ static void top_layout_init(struct top_layout *L, int w, int h) {
     int right_w = w - right_x;
 
     /* Left: three stacked panels with 1-row gaps.
-     *   mem 40%, env 35%, dev remainder. */
-    int mem_h = (body_h * 40) / 100;
-    int env_h = (body_h * 35) / 100;
-    int dev_h = body_h - mem_h - env_h - 2;  /* two gaps */
+     *   mem n1%, env n2%, dev remainder. */
+    int mem_h = (body_h * 20) / 100; //n1
+    int env_h = (body_h * 25) / 100; //n2
+    int dev_h = body_h - mem_h - env_h - 2;  /* bottom padding n-gaps */
     if (mem_h < 4) mem_h = 4;
     if (env_h < 4) env_h = 4;
     if (dev_h < 4) dev_h = body_h - mem_h - env_h - 2;
@@ -239,7 +198,7 @@ static void draw_header(struct top_layout *L, const struct top_snapshot *s) {
 
     char up[32];
     fmt_uptime(s->uptime_ms, up, sizeof up);
-    tui_text(L->w / 2 - 6, L->header.y, bg, "up %s", up);
+    tui_text(L->w / 2 - 6, L->header.y, bg, "Uptime: %s", up);
 
     tui_text(L->w - 14, L->header.y, bg, "Rate: %luHz",
              (unsigned long)s->timer_hz);
@@ -287,7 +246,7 @@ static void draw_memory(const struct tui_rect r, const struct top_snapshot *s,
 static void draw_env(const struct tui_rect r, const struct top_snapshot *s,
                      const struct top_snapshot *p) {
     uint8_t a = TUI_ATTR(TUI_FG_WHITE, TUI_FG_BLACK);
-    struct tui_rect in = panel(r, "ENV", a);
+    struct tui_rect in = panel(r, "ENVIRONMENT STORE", a);
     if (in.w <= 0) return;
 
     int y = in.y;
@@ -321,36 +280,38 @@ static void draw_env(const struct tui_rect r, const struct top_snapshot *s,
     }
 }
 
+/* shortname: class description */
 static const char *class_name(enum bus_class c) {
     switch (c) {
         case BUS_CLASS_NONE:     return "none";
-        case BUS_CLASS_CONSOLE:  return "console";
-        case BUS_CLASS_TIMER:    return "timer";
-        case BUS_CLASS_ENV:      return "env";
-        case BUS_CLASS_VFS:      return "vfs";
-        case BUS_CLASS_BUS:      return "bus";
-        case BUS_CLASS_VM16:     return "vm16";
-        case BUS_CLASS_PROXY:    return "proxy";
-        case BUS_CLASS_KEYBOARD: return "kbd";
+        case BUS_CLASS_CONSOLE:  return "IO";
+        case BUS_CLASS_TIMER:    return "ISR";
+        case BUS_CLASS_ENV:      return "MEMORY";
+        case BUS_CLASS_VFS:      return "MEMORY";
+        case BUS_CLASS_BUS:      return "IO";
+        case BUS_CLASS_VM16:     return "IO";
+        case BUS_CLASS_PROXY:    return "IO";
+        case BUS_CLASS_KEYBOARD: return "IO";
+        case BUS_CLASS_METRIC:   return "IO";
         default:                 return "undefined";
     }
 }
 
 static void draw_devices(const struct tui_rect r, const struct top_snapshot *s) {
     uint8_t a = TUI_ATTR(TUI_FG_WHITE, TUI_FG_BLACK);
-    struct tui_rect in = panel(r, "DEVICES", a);
+    struct tui_rect in = panel(r, "BUS DEVICES", a);
     if (in.w <= 0) return;
 
     int y = in.y;
     int max_rows = in.h;
 
     tui_text(in.x + 1, y++, a, "%-10s %-8s %-3s %-3s",
-             "name", "class", "v", "ow");
+             "NAME", "CLASS", "VERSION", "ID");
 
     for (size_t i = 0; i < s->dev_count && (y - in.y) < max_rows; i++, y++) {
         const struct bus_device *d = &s->dev[i];
         if (d->name == NULL) continue;
-        tui_text(in.x + 1, y, a, "%-10.10s %-8.8s %-3u %-3u",
+        tui_text(in.x + 1, y, a, "%-10.10s %-8.8s %-7u %-3u",
                  d->name,
                  class_name(d->class),
                  (unsigned)d->version,
@@ -360,7 +321,7 @@ static void draw_devices(const struct tui_rect r, const struct top_snapshot *s) 
 
 static void draw_irq(const struct tui_rect r, const struct top_snapshot *s) {
     uint8_t a = TUI_ATTR(TUI_FG_WHITE, TUI_FG_BLACK);
-    struct tui_rect in = panel(r, "IRQ", a);
+    struct tui_rect in = panel(r, "IRQ TABLE", a);
     if (in.w <= 0) return;
 
     int y = in.y;
@@ -377,37 +338,6 @@ static void draw_irq(const struct tui_rect r, const struct top_snapshot *s) {
                  (unsigned long long)ii->count,
                  (unsigned long long)ii->spurious,
                  (unsigned long long)ii->unhandled);
-    }
-}
-
-static void draw_keyboard(const struct tui_rect r, const struct top_snapshot *s,
-                          const struct top_snapshot *p) {
-    uint8_t a = TUI_ATTR(TUI_FG_WHITE, TUI_FG_BLACK);
-    struct tui_rect in = panel(r, "KEYBOARD", a);
-    if (in.w <= 0) return;
-
-    int y = in.y;
-
-    uint64_t d_keys = udelta(s->kbd_keystrokes, p->kbd_keystrokes);
-
-    tui_text(in.x + 1, y++, a, "keystrokes %llu  (d:%llu)",
-             (unsigned long long)s->kbd_keystrokes,
-             (unsigned long long)d_keys);
-
-    if (y < in.y + in.h) {
-        tui_text(in.x + 1, y++, a, "chars %llu   dropped %llu",
-                 (unsigned long long)s->kbd_chars,
-                 (unsigned long long)s->kbd_dropped);
-    }
-    if (y < in.y + in.h) {
-        tui_text(in.x + 1, y++, a, "last char '%c'  scancode 0x%02llx",
-                 (char)(s->kbd_last_char ? s->kbd_last_char : '.'),
-                 (unsigned long long)s->kbd_scancode);
-    }
-    if (y < in.y + in.h) {
-        tui_text(in.x + 1, y++, a, "modifiers 0x%02llx  ticks %llu",
-                 (unsigned long long)s->kbd_modifiers,
-                 (unsigned long long)s->kbd_ticks);
     }
 }
 
@@ -438,7 +368,6 @@ static void top_draw(struct tui_view *v) {
     draw_env(L.env, &s->prev, &s->prev);
     draw_devices(L.dev, &s->prev);
     draw_irq(L.irq, &s->prev);
-    draw_keyboard(L.kbd, &s->prev, &s->prev);
     draw_footer(&L);
 }
 
