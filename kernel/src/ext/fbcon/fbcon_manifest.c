@@ -24,7 +24,7 @@ void fbcon_publish_manifest(struct limine_framebuffer *fb, struct flanterm_conte
     if (env == NULL || fb == NULL || term == NULL) return;
 
     // appends to existing manifest namespace
-    const char ns[] = "kernel.dev.console";
+    const char ns[] = "console";
 
     // BUS_CONSOLE_ID owns these symbols
     uint32_t m = env_mask_build(BUS_CONSOLE_ID, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
