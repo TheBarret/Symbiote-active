@@ -5,7 +5,8 @@
 #include "core/version.h"
 
 /* PIT channel 0 as the system tick. Needs idt_init() and pic_init();
- * the tick only starts arriving once interrupts are enabled with cpu_sti(). */
+ * the tick only starts arriving once interrupts are enabled with cpu_sti().
+ * Double-call is warn-no-op. */
 void timer_init(uint32_t hz);
 
 /* The real tick rate (the PIT divisor is an integer, so it is not exactly hz). */
@@ -33,12 +34,13 @@ void timer_sleep_ms(uint64_t ms);
  * The ISR only marks a task ready. This means a callback may call console_write,
  * vfs_write, klog, or anything else that is not safe in interrupt context.
  *
- * timer_sleep_ms() must NOT be called from inside a callback; it would deadlock
- * the drain. Debug builds assert on this.
+ * timer_sleep_ms() must NOT be called from inside a callback; it would stall
+ * the drain for the sleep's duration. All builds PANIC on this.
  *
  * timer_drain() is called by the keyboard loop between interrupts.
  * One drain site for callbacks run in scheduling order among tasks whose deadline has passed. */
 
+/* timer_irq is O(TIMER_MAX_TASKS) per tick; keep the constant small or move to a heap if it grows. */
 int  timer_after(uint64_t ms, void (*cb)(void *), void *arg);
 int  timer_cancel(int id);
 void timer_drain(void); // Ref: /core/keyboard.c at kbd_getchar()
@@ -71,4 +73,11 @@ struct timer_ops {
 uint64_t ms_to_ticks_floor(uint64_t ms);
 uint64_t ms_to_ticks_ceil (uint64_t ms);
 uint64_t ms_to_ticks_round(uint64_t ms);
+
+
+/* Timer health introspection (ref: metrics.c). */
+uint64_t timer_divisor(void);       /* the PIT divisor actually programmed */
+size_t   timer_tasks_active(void);  /* slots with id != 0 */
+size_t   timer_tasks_pending(void); /* slots with active && ready, awaiting drain */
+
 #endif /* CORE_TIMER_H */
