@@ -122,6 +122,7 @@ kernel/
           ├── memory/                 # Heap, memory inspect and testers
           ├── env/                    # Environment command-line tool
           ├── envtool/                # Environment inspect and testers
+		  ├── explorer/               # Ramfs/vfs browser
           ├── script/                 # VM machine & library (native script/compiler/bytecode service)
           └── assets/                 # Static resources & embedded binary payloads
 ```
