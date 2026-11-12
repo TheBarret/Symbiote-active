@@ -14,7 +14,7 @@
 static void set_int(const struct env_ops *env, const char *ns, const char *name, size_t v, uint32_t mask) {
     char buf[16];
     ksnprintf(buf, sizeof buf, "%zu", v);
-    int rc = env->set(ns, name, buf, 0, 0, 0, mask);
+    int rc = env->set(ns, name, buf, 0, 0, 10, mask);
     if (rc != ENV_OK)
         klog_warning("fbcon_manifest(env->set %s): exit code = %d", name, rc);
 }
@@ -23,7 +23,10 @@ void fbcon_publish_manifest(struct limine_framebuffer *fb, struct flanterm_conte
     const struct env_ops *env = bus_env();
     if (env == NULL || fb == NULL || term == NULL) return;
 
+    // appends to existing manifest namespace
     const char ns[] = "kernel.dev.console";
+
+    // BUS_CONSOLE_ID owns these symbols
     uint32_t m = env_mask_build(BUS_CONSOLE_ID, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
 
     size_t cols = 0, rows = 0;
