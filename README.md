@@ -97,6 +97,7 @@ kernel/
       │   │   ├── keyboard.h          # Keyboard poller, reader
       │   │   ├── vfs.h               # Virtual File System (ramfs implementation)
       │   │   ├── timer.h             # Programmable interval clock controller
+      │   │   ├── metrics.h           # Collects low-interval kernel telemetry, published on env
       │   │   └── env.h               # Environment variable key-value storage device (self-regulating variable store)
       │   │
       │   ├── bus.h                   # Bus registry & late device discovery manager
