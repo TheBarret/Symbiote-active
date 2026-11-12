@@ -6,26 +6,26 @@
 /* Global Descriptor Table + Task State Segment.
  *
  * Symbiote runs everything in ring 0, so there are no user segments:
- *   0x00  null
- *   0x08  kernel code (64-bit)
- *   0x10  kernel data
- *   0x18  TSS (a 16-byte descriptor: it occupies TWO table slots)
+ *   0x00  Null descriptor
+ *   0x08  Kernel code (64-bit long mode)
+ *   0x10  Kernel data
+ *   0x18  TSS descriptor (16-byte system descriptor occupying TWO table slots: 0x18 and 0x20)
  *
- * The TSS exists for its Interrupt Stack Table (IST).
- * A vector whose IDT gate names an IST slot always runs on that known-good stack,
- * so a double fault caused by a wrecked kernel stack still produces a report instead of a triple fault.
- * Add ring-3 segments only when there is a ring 3. */
+ * The TSS exists primarily for its Interrupt Stack Table (IST).
+ * An IDT vector assigned to an IST slot executes on a dedicated, known-good stack,
+ * ensuring that critical exceptions like Double Faults (#DF) or NMIs do not trigger
+ * triple faults due to a corrupted or exhausted stack.
+ */
 
 #define GDT_KCODE 0x08
 #define GDT_KDATA 0x10
 #define GDT_TSS   0x18
 
-/* IST slot numbers (1-based, as the IDT gate field wants them). */
+/* IST slot numbers (1-based, matching the IDT gate ist field). */
 #define IST_DOUBLE_FAULT 1
 #define IST_NMI          2
 
-/* Load the GDT, reload CS/DS/ES/SS, and load the task register.
- * Needs no heap or PMM: every table and stack here is static. */
+/* Initialize GDT, reload segment registers via far return, and load task register. */
 void gdt_init(void);
 
 #endif

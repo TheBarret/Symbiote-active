@@ -50,7 +50,7 @@ static void lapic_virtual_wire(void) {
 
 void pic_init(void) {
     /* ICW1: start initialisation, expect ICW4. */
-    klog("→ pic_init() initializing...\n");
+    klog("→ pic_init()\n");
     outb(PIC1_CMD, ICW1_INIT | ICW1_ICW4); io_wait();
     outb(PIC2_CMD, ICW1_INIT | ICW1_ICW4); io_wait();
     /* ICW2: vector offsets. Without this IRQ0-7 land on vectors 8-15,

@@ -1,10 +1,11 @@
 #ifndef CORE_IDT_H
 #define CORE_IDT_H
 
-/* Interrupt Descriptor Table: all 256 vectors, installed once at boot.
- * Every vector gets a real gate, so a stray or unexpected interrupt lands in interrupt_dispatch(),
- * and is reported by number instead of becoming a confusing #GP or a triple fault.
- * Needs gdt_init() first (it names the code selector and the IST stacks). Needs no heap. */
+/* Interrupt Descriptor Table: all 256 vectors.
+ * Every vector is populated with an explicit handler stub so unexpected
+ * interrupts or exceptions route to the dispatch handler instead of causing
+ * unhandled faults or triple faults. Requires gdt_init() to be run first.
+ */
 void idt_init(void);
 
 #endif
