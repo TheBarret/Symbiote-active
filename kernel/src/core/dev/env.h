@@ -85,7 +85,7 @@ struct env_info {
     size_t   capacity;            /* slots */
     size_t   count;               /* live entries (may include expired ones not yet swept) */
     size_t   used_bytes;          /* payload bytes: ns + name + value */
-    size_t   max_bytes;
+    size_t   max_bytes;           /* bounds logical payload (ns+name+value); actual heap usage is higher (~3 NULs + one header per entry) */
     bool     timer_attached;
     uint64_t n_set, n_get, n_peek, n_unset;
     uint64_t n_reclaim_access, n_reclaim_time, n_reclaim_space, n_reclaim_explicit;
@@ -111,6 +111,7 @@ struct env_ops {
     /* Remove an entry. NOT gated by READONLY/PINNED (env cannot see who is calling);
      * callers that face untrusted code must gate it themselves. */
     int (*unset)(const char *ns, const char *name);
+    /* Cheap existence check; no access budget consumed; expired reads as absent (same as get/peek/stat). */
     int (*is_exist)(const char *ns, const char *name);
 
     /* Metadata for one entry. No value, no budget consumed, last_access untouched. */
@@ -155,6 +156,8 @@ const struct env_ops *bus_env(void);
 
 /* Idempotent guard: a second call is ignored with a warning. */
 void env_init(size_t max_entries, size_t max_bytes);
+/* Frees entries and device; bus entry stays registered (static ops); subsequent calls return ENV_NO_DEVICE. Intended for teardown/tests.
+ * Must not be called from a timer_drain callback; timer_cancel stops future sweeps but an in-flight env_sweep will reschedule itself before returning. */
 void env_destroy(void);
 
 #endif /* CORE_ENV_H */
