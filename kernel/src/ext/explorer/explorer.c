@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <lib/mem.h>
 #include <lib/string.h>
 #include <core/dev/console.h>
 #include <core/dev/keyboard.h>
@@ -13,6 +14,7 @@
 
 #define PATH_MAX 128
 #define ENTRY_MAX 128
+#define PREVIEW_MAX 2048
 
 struct entry {
     char name[VFS_NAME_MAX + 1];
@@ -26,6 +28,12 @@ struct explorer_state {
     size_t count;
     size_t selected;
     size_t top;         /* scroll offset */
+
+    /* Preview cache */
+    char   preview[PREVIEW_MAX];
+    size_t preview_len;
+    bool   preview_is_dir;
+    size_t preview_sel; /* which entry index the cache belongs to */
 };
 
 static void path_join(const char *base, const char *name, char *out, size_t cap) {
@@ -35,30 +43,24 @@ static void path_join(const char *base, const char *name, char *out, size_t cap)
         ksnprintf(out, cap, "%s/%s", base, name);
 }
 
-/* Harden: strip trailing slashes before finding the parent,
- * and handle the root case without manual index arithmetic. */
 static void path_parent(char *path) {
     size_t len = strlen(path);
 
-    /* Strip trailing slashes */
     while (len > 1 && path[len - 1] == '/') {
         path[--len] = '\0';
     }
     if (len <= 1) {
-        return; // already root
+        return;
     }
 
-    /* Find the last slash */
     while (len > 0 && path[len - 1] != '/') {
         len--;
     }
 
-    /* If we found a slash, remove it and everything after */
     if (len > 0) {
         path[len - 1] = '\0';
     }
 
-    /* If we ended up with an empty string (e.g., "/foo"), make it "/" */
     if (path[0] == '\0') {
         path[0] = '/';
         path[1] = '\0';
@@ -71,6 +73,9 @@ static void load_dir(struct explorer_state *s, const char *path) {
     s->count = 0;
     s->selected = 0;
     s->top = 0;
+
+    /* Force preview invalidation on directory change */
+    s->preview_sel = (size_t)-1;
 
     size_t iter = 0;
     char name[VFS_NAME_MAX + 1];
@@ -93,6 +98,36 @@ static void load_dir(struct explorer_state *s, const char *path) {
     }
 }
 
+static void load_preview(struct explorer_state *s) {
+    s->preview_len = 0;
+    s->preview[0] = '\0';
+    s->preview_is_dir = false;
+    s->preview_sel = s->selected; // Mark as up-to-date immediately
+
+    if (s->count == 0 || s->selected >= s->count) return;
+
+    struct entry *e = &s->entries[s->selected];
+    if (e->is_dir) {
+        s->preview_is_dir = true;
+        return;
+    }
+
+    char full[PATH_MAX];
+    path_join(s->path, e->name, full, sizeof full);
+
+    struct vfs_file *f = vfs_open(full, VFS_O_RDONLY);
+    if (!f) return;
+
+    /* Cap at PREVIEW_MAX - 1 so we always NUL-terminate */
+    long n = vfs_read(f, s->preview, PREVIEW_MAX - 1);
+    vfs_close(f);
+
+    if (n > 0) {
+        s->preview_len = (size_t)n;
+        s->preview[n] = '\0';
+    }
+}
+
 static void draw(struct tui_view *v) {
     struct explorer_state *s = v->state;
 
@@ -101,19 +136,28 @@ static void draw(struct tui_view *v) {
 
     tui_clear(TUI_ATTR_DEFAULT);
 
-    /* Title: Use "%s" to prevent format-string injection via path */
+    /* Title */
     tui_text(0, 0, TUI_ATTR(TUI_FG_CYAN, 0), "explorer  %s", s->path);
 
-    /* Frame around the list, rows 2..h-3 */
-    struct tui_rect frame = { 0, 2, w, h - 3 };
-    tui_box(frame, TUI_ATTR(TUI_FG_WHITE, 0));
+    /* Status line */
+    tui_text(0, h - 1, TUI_ATTR(TUI_FG_YELLOW, 0),
+             "up/down move   enter descend   backspace up   q quit");
 
-    /* List, inside the frame */
-    int rows = frame.h - 2;
-    if (rows < 1)
-        rows = 1;
+    /* Panel geometry: split 50/50 */
+    int list_w = w / 2;
+    int prev_w = w - list_w;
 
-    /* Keep the selected entry visible. */
+    struct tui_rect list_frame = { 0, 2, list_w, h - 3 };
+    struct tui_rect prev_frame = { list_w, 2, prev_w, h - 3 };
+
+    tui_box(list_frame, TUI_ATTR(TUI_FG_WHITE, 0));
+    tui_box(prev_frame, TUI_ATTR(TUI_FG_WHITE, 0));
+
+    /* --- LEFT PANE (File List) --- */
+    int rows = list_frame.h - 2;
+    if (rows < 1) rows = 1;
+
+    /* Ensure selection stays visible */
     if (s->selected < s->top)
         s->top = s->selected;
     if (s->selected >= s->top + (size_t)rows)
@@ -126,15 +170,53 @@ static void draw(struct tui_view *v) {
                       ? TUI_ATTR(TUI_FG_BLACK, TUI_FG_CYAN)
                       : TUI_ATTR_DEFAULT;
 
-        /* Use "%s" to prevent format-string injection via filename */
-        tui_text(1, 3 + i, attr, "%-12s %s",
+        /* Pad with spaces to fill the highlight bar if selected */
+        tui_text(1, 3 + i, attr, "%-12s %-*s",
                  e->is_dir ? "<DIR>" : "",
+                 list_w - 16, /* remaining width approx */
                  e->name);
     }
 
-    /* Status line */
-    tui_text(0, h - 1, TUI_ATTR(TUI_FG_YELLOW, 0),
-             "up/down move   enter descend   backspace up   q quit");
+    /* --- RIGHT PANE (Preview) --- */
+    if (s->preview_sel != s->selected) {
+        load_preview(s);
+    }
+
+    if (s->preview_is_dir) {
+        tui_text(list_w + 1, 4, TUI_ATTR(TUI_FG_WHITE, 0), "<directory>");
+    } else if (s->preview_len == 0) {
+        tui_text(list_w + 1, 4, TUI_ATTR(TUI_FG_WHITE, 0), "(empty or unreadable)");
+    } else {
+        int prows = prev_frame.h - 2;
+        if (prows < 1) prows = 1;
+
+        int col = list_w + 1;
+        int row = 4;
+        size_t pos = 0;
+
+        for (int i = 0; i < prows && pos < s->preview_len; i++) {
+            size_t line_start = pos;
+            while (pos < s->preview_len && s->preview[pos] != '\n') pos++;
+            size_t line_len = pos - line_start;
+            if (pos < s->preview_len) pos++; /* skip '\n' */
+
+            /* Clip to fit inside the box margins */
+            if (line_len > (size_t)(prev_w - 2))
+                line_len = (size_t)(prev_w - 2);
+
+            char linebuf[256];
+            if (line_len >= sizeof(linebuf)) line_len = sizeof(linebuf) - 1;
+            memcpy(linebuf, s->preview + line_start, line_len);
+            linebuf[line_len] = '\0';
+
+            tui_text(col, row + i, TUI_ATTR(TUI_FG_WHITE, 0), "%s", linebuf);
+        }
+
+        /* Truncation indicator */
+        if (s->preview_len == PREVIEW_MAX - 1 && prows > 0) {
+            tui_text(col, row + prows - 1, TUI_ATTR(TUI_FG_YELLOW, 0), "… truncated");
+        }
+    }
 }
 
 static bool key(struct tui_view *v, enum kbd_event ev, char c) {
