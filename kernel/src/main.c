@@ -20,6 +20,7 @@
 #include <core/dev/vfs.h>       // Virtual File System, ramfs
 #include <core/dev/timer.h>     // Clock controller
 #include <core/dev/env.h>       // Environment variable store device
+#include <core/dev/metrics.h>   // Metrics and stats servicer
 
 /* kernel modules */
 #include <core/bus.h>       // Bus registry, late device discovery (ref: kernel devices)
@@ -57,10 +58,8 @@ void kmain(void) {
         klog_error("Error: no PS/2 keyboard detected!\n");
         cpu_halt_forever();     // no keyboard, halt.
     }
-
     vfs_init();                 // filesystem
-
-
+    metrics_init(5000);         // metric servicer, n-s update interval
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
 
