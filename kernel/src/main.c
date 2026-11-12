@@ -59,7 +59,8 @@ void kmain(void) {
         cpu_halt_forever();     // no keyboard, halt.
     }
     vfs_init();                 // filesystem
-    metrics_init(5000);         // metric servicer, n-s update interval
+    metrics_init(METRIC_MS);    // metric service
+
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
 
@@ -78,7 +79,7 @@ void kmain(void) {
 
     for (;;) {
         /* drain any scheduled timers (env sweep, top refresh, vm16 async, etc.) */
-        timer_drain();
+        timer_drain();      // do not move this!
         /* poll for keyboard input without blocking */
         char c = 0;
         enum kbd_event ev = kbd_poll(&c);
