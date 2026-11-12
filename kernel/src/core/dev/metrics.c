@@ -55,6 +55,17 @@ static void sample_timer_hz(char *buf, size_t max) {
     ksnprintf(buf, max, "%lu", (unsigned long)timer_hz());
 }
 
+static void sample_timer_divisor(char *buf, size_t max) {
+    ksnprintf(buf, max, "%llu", (unsigned long long)timer_divisor());
+}
+
+static void sample_timer_tasks_active(char *buf, size_t max) {
+    ksnprintf(buf, max, "%llu", (unsigned long long)timer_tasks_active());
+}
+
+static void sample_timer_tasks_pending(char *buf, size_t max) {
+    ksnprintf(buf, max, "%llu", (unsigned long long)timer_tasks_pending());
+}
 
 /* METRIC TABLE */
 
@@ -68,6 +79,9 @@ static const struct metric_source metric_table[] = {
     { "/metrics/timer/ticks",     sample_timer_ticks  },
     { "/metrics/timer/uptime_ms", sample_timer_uptime },
     { "/metrics/timer/hz",        sample_timer_hz     },
+    { "/metrics/timer/divisor",        sample_timer_divisor        },
+    { "/metrics/timer/tasks_active",   sample_timer_tasks_active   },
+    { "/metrics/timer/tasks_pending",  sample_timer_tasks_pending  },
 
     /* Sentinel */
     { NULL, NULL }
@@ -124,9 +138,7 @@ bool metrics_read_str(const char *path, char *buf, size_t cap) {
     return true;
 }
 
-
 /* CORE METRIC SAMPLING AND UPDATE CYCLE */
-
 
 static int metrics_sample_and_update(void) {
     bool success = true;
@@ -141,6 +153,7 @@ static int metrics_sample_and_update(void) {
 
     return success ? 0 : -1;
 }
+
 
 /* Timer callback for low-interval background updates */
 static void metrics_timer_cb(void *arg) {
