@@ -85,7 +85,6 @@
 
 - `config.h`, `core/`, `core/arch/`: codebase seen some minor tweaks and refinements, added new `class` and `id` definition.
 - `core/dev/metric.c`, `core/dev/metric.h`: added new metric service, uses `vfs.c` as endpoints, uses `env` to publish file locations (like Linux `/proc` concept).
-
-
+- `ext/top/top.c`: removed `keyboard` module, re-designed layout, doubled refresh rate to `2600`ms.
 
  
