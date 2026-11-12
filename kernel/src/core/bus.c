@@ -146,7 +146,7 @@ void bus_publish_manifest(void) {
 
         int ret_value;
         char ns[64];
-        ksnprintf(ns, sizeof(ns), "kernel.dev.%s", dev->name);
+        ksnprintf(ns, sizeof(ns), "%s", dev->name);
         /* Bus owns its manifest: writer == owner so PINNED's owner-check stays consistent on any future re-publish. */
         uint32_t m = env_mask_build((uint16_t)BUS_BUS_ID, ENV_TYPE_INT, ENV_FLAG_PINNED | ENV_FLAG_READONLY, 0);
 
