@@ -17,8 +17,8 @@
 #include <core/mask.h>
 #include <ext/envtool/envtool.h>
 
-#define LEFT_W_DEFAULT   32
-#define MAX_CACHED_ITEMS 256
+#define LEFT_W_DEFAULT   50
+#define MAX_CACHED_ITEMS 1024
 #define ENVTOOL_DEFAULT_N 100
 #define ENVTOOL_MAX_N     4096
 
