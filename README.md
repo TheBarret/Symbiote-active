@@ -168,7 +168,8 @@ All three saturate on overflow, and treat `hz == 0` as "timer not initialized" (
 The environment device is a bounded, fixed-capacity store of `(namespace, name) → value | [mask-contract]` entries,  
 registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.  
 
-<img width="1286" height="863" alt="Screenshot_2026-11-06_23-04-0833" src="https://github.com/user-attachments/assets/e0183475-a18f-4b84-88ac-85c97c193578" />  
+<img width="1286" height="863" alt="envtool.viewer" src="https://github.com/user-attachments/assets/6e8569b9-bebb-40a7-853a-00ed1ad079f7" />  
+
 
 Per-entry policy:  
 
