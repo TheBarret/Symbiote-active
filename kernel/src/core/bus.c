@@ -135,7 +135,7 @@ void bus_settle(void) {
 
 void bus_publish_manifest(void) {
     if (manifest_published) {
-        klog_warning("bus_publish_manifest called twice\n");
+        klog_warning("bus_publish_manifest(): already published\n");
         return;
     }
     const struct env_ops *env = bus_env();
@@ -153,21 +153,21 @@ void bus_publish_manifest(void) {
         /* ID */
         char buf_id[16];
         ksnprintf(buf_id, sizeof(buf_id), "%u", (unsigned)dev->owner_id);
-        ret_value = env->set(ns, "id", buf_id, 0, 0, 0, m);
+        ret_value = env->set(ns, "id", buf_id, 0, 0, 10, m);
         /* validate */
         if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
 
         /* CLASS */
         char buf_class[16];
         ksnprintf(buf_class, sizeof(buf_class), "%u", (unsigned)dev->class);
-        ret_value = env->set(ns, "class", buf_class, 0, 0, 0, m);
+        ret_value = env->set(ns, "class", buf_class, 0, 0, 10, m);
         /* validate */
         if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
 
         /* VERSION */
         char buf_ver[16];
         ksnprintf(buf_ver, sizeof(buf_ver), "%u", (unsigned)dev->version);
-        ret_value = env->set(ns, "version", buf_ver, 0, 0, 0, m);
+        ret_value = env->set(ns, "version", buf_ver, 0, 0, 10, m);
         /* validate */
         if (ret_value != ENV_OK) { klog_warning("bus_publish_manifest(env->set): exit code = %d", ret_value); }
     }

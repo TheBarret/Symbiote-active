@@ -53,8 +53,8 @@ enum bus_class {
     BUS_CLASS_BUS      = 5,   /* bus interior, bus.c */
     BUS_CLASS_VM16     = 6,   /* vm16 module */
     BUS_CLASS_PROXY    = 7,   /* proxy module */
-    BUS_CLASS_KEYBOARD = 8,   /* kbd module */
-    BUS_CLASS_STAT     = 9,   /* stats module */
+    BUS_CLASS_KEYBOARD = 8,   /* keyboard module */
+    BUS_CLASS_METRIC   = 9,   /* metrics module */
 };
 
 struct bus_device {

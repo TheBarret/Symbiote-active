@@ -106,6 +106,7 @@
 #define BUS_BUS_ID              6u
 #define BUS_VM16                7u
 #define BUS_PROXY               8u
+#define BUS_METRICS             9u
 
 /* Command dispatcher settings
  * Ref: src/core/cmd.c
@@ -125,6 +126,7 @@
 #define ENV_SWEEP_PERIOD_MS     1000
 #define ENV_SWEEP_BATCH         64
 #define ENV_MASK_DEFAULT        0x0000
+
 
 /* fail at build */
 _Static_assert(BUS_KERN_ID    <= 0xFF && BUS_CONSOLE_ID <= 0xFF &&
