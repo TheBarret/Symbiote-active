@@ -279,6 +279,24 @@ Every `set` and every reclaim updates these in `O(1)` per set bit, so the index 
 
 For example, "does anything still exist for a decommissioned driver?" is one array lookup. The index is a **filter, never an answer**: entries that have expired but are not yet swept are still counted, so a non-zero counter means "a scan is required" and a zero counter means "provably nothing matches". It can cost a scan; it can never return a wrong result.
 
+## In-depth: Metric endpoints for statistics 
+
+A `metric` module assigned in the bus, that funnels all important information about kernel, memory, cpu, interrupt states.  
+These metrics have their own `env` symbols that will hold the file path for each single metric for each module in the bus.  
+
+<img width="1280" height="293" alt="viewer" src="https://github.com/user-attachments/assets/7879e51c-fa03-461e-af88-80f8844ae695" />  
+
+
+With the `explorer` vfs viewer you can verify the values:  
+
+<img width="1280" height="240" alt="viewer" src="https://github.com/user-attachments/assets/fbd8e859-4203-4623-8b7c-9a505c95a678" />  
+
+<img width="1287" height="215" alt="viewer" src="https://github.com/user-attachments/assets/c6621b68-6d88-4ef7-9fbf-3b2a385f1c12" />  
+
+*at console run:`> explorer` to load filesystem inspection tool*  
+
+> There is no concern for accidental deletion, `metric` recomputes and writes all of them again each `n`-milliseconds, so never absent for long.  
+
 ## In-depth: Software-based Decimals
 
 `ext/script/decimal.c`, `ext/script/decimal.h`:  
