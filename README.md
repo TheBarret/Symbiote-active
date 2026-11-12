@@ -123,6 +123,7 @@ kernel/
           ├── env/                    # Environment command-line tool
           ├── envtool/                # Environment inspect and testers
 	  ├── explorer/               # Ramfs/vfs browser
+          ├── top/                    # System monitor app
           ├── script/                 # VM machine & library (native script/compiler/bytecode service)
           └── assets/                 # Static resources & embedded binary payloads
 ```
