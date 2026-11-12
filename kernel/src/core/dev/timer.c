@@ -40,11 +40,6 @@ static bool in_drain = false;
 /* Forward declaration; defined at the bottom after the functions it points at. */
 static const struct timer_ops timer_bus_ops;
 
-/* env back-end */
-static int timer_publish_id = 0;
-static void timer_publish_snapshot(void); /* forward */
-static void timer_publish_task(void *arg); /* forward */
-
 /* Runs in IRQ context: count and nothing else. */
 static void timer_irq(void *ctx) {
     (void)ctx;
@@ -140,6 +135,8 @@ uint64_t ms_to_ticks_round(uint64_t ms) {
 }
 
 void timer_sleep_ms(uint64_t ms) {
+    if (in_drain)
+        PANIC("timer_sleep_ms from a drain callback");
     if (!inited || ms == 0)
         return;
 
@@ -147,6 +144,10 @@ void timer_sleep_ms(uint64_t ms) {
     uint64_t need = ms_to_ticks_ceil(ms);
     if (need == 0)
         need = 1;   /* a nonzero request sleeps at least one tick */
+    if (need > UINT64_MAX - ticks) {
+        klog_warning("timer_sleep_ms: duration unrepresentable\n");
+        return;
+    }
 
     uint64_t flags = cpu_irq_save();
     uint64_t target = ticks + need;
@@ -172,7 +173,8 @@ int timer_after(uint64_t ms, void (*cb)(void *), void *arg) {
         if (next_task_id <= 0)
             next_task_id = 1;   /* wrap; stale ids simply never match */
 
-        tasks[i].deadline_ticks = ticks + ms_to_ticks_ceil(ms);
+        uint64_t need = ms_to_ticks_ceil(ms);
+        tasks[i].deadline_ticks = (need > UINT64_MAX - ticks) ? UINT64_MAX : ticks + need;
         tasks[i].cb             = cb;
         tasks[i].arg            = arg;
         tasks[i].id             = id;
@@ -209,6 +211,8 @@ int timer_cancel(int id) {
     return result;
 }
 
+/* Pre-IRQ-save reads are safe because: ISR only sets ready false→true;
+ * cancel/drain both run in thread context; in_drain blocks reentrancy. */
 void timer_drain(void) {
     if (in_drain)
         return;   /* not reentrant */
@@ -249,39 +253,11 @@ static const struct timer_ops timer_bus_ops = {
     .cancel    = timer_cancel,
 };
 
-/* env back-end */
-
-static void timer_publish_snapshot(void) {
-    const struct env_ops *env = bus_env();
-    if (env == NULL)
-        return;
-
-    const char *ns = "kernel.dev.timer";
-    char buf[32];
-
-    /* set mask */
-    uint32_t m_int = env_mask_build(BUS_TIMER_ID, ENV_TYPE_INT, ENV_FLAG_CACHEABLE, 0);
-
-    #define PUB_U(field, val) do {                                         \
-        ksnprintf(buf, sizeof buf, "%llu", (unsigned long long)(val));     \
-        (void)env->set(ns, (field), buf, 0, 0, ENV_IMPORTANCE_DEFAULT, m_int); \
-    } while (0)
-
-    PUB_U("ticks",      timer_ticks());
-    PUB_U("uptime_ms",  uptime_ms());
-    PUB_U("hz",         timer_hz());
-
-    #undef PUB_U
-}
-
-static void timer_publish_task(void *arg) {
-    (void)arg;
-    timer_publish_id = timer_after(TIMER_PUBLISH_MS, timer_publish_task, NULL);
-    timer_publish_snapshot();
-}
-
-
 void timer_init(uint32_t hz) {
+    if (inited) {
+        klog_warning("timer_init called twice\n");
+        return;
+    }
     if (hz == 0)
         hz = TIMER_HZ; // = 1000hz
     uint64_t d = PIT_FREQ / hz;
@@ -306,10 +282,12 @@ void timer_init(uint32_t hz) {
         .private_data = NULL,
         .owner_id     = BUS_TIMER_ID,
     };
-    bus_register(&dev);
-    bus_test("timer");
-    /* env back-end */
-    timer_publish_id = timer_after(TIMER_PUBLISH_MS, timer_publish_task, NULL);
+    if (bus_register(&dev) != 0) {
+        klog_warning("timer: bus registration failed\n");
+    } else {
+        bus_test("timer");
+    }
+
 }
 
 uint32_t timer_hz(void) {

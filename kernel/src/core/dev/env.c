@@ -47,16 +47,16 @@ struct env_device {
     size_t               used_bytes;         /* sum of ns_len + name_len + value_len */
     size_t               max_bytes;
 
-    /* Exact mask index. Maintained incrementally on every set / reclaim, so it
-     * never needs a rescan and never goes stale:
+    /* Exact mask index, maintained incrementally on every set / reclaim,
+     * no rescan or staleness expected:
      *   bit_cnt[b]     number of entries with mask bit b set
      *   active_mask_or bit b is set <=> bit_cnt[b] > 0   (the exact OR of all masks)
      *   owner_cnt[o]   number of entries whose OWNER field == o
      *   type_cnt[t]    number of entries whose TYPE  field == t
-     * Entries that have expired but not yet been swept are still counted, so a
-     * ZERO here proves "nothing can match" (the O(1) short-circuit) while a
-     * non-zero value only means "a scan is needed". The index is a filter,
-     * never an answer; it can cost a scan but can never produce a wrong result. */
+     * Entries that have expired but not yet been swept are still counted,
+     * so a ZERO here proves "nothing can match" (the O(1) short-circuit)
+     * while a non-zero value only means "a scan is needed".
+     * The index is a filter, never an answer; it can cost a scan but can never produce a wrong result. */
     uint32_t             active_mask_or;
     uint32_t             bit_cnt[32];
     uint32_t             owner_cnt[256];
@@ -95,17 +95,31 @@ static void env_mask_account(struct env_device *e, uint32_t mask) {
 
 static void env_mask_unaccount(struct env_device *e, uint32_t mask) {
     uint8_t o = env_mask_owner(mask), t = env_mask_type(mask);
+#ifdef SYM_MEMDEBUG
+    if (e->owner_cnt[o] == 0) PANIC("env: mask index underflow");
+    if (e->type_cnt[t] == 0)  PANIC("env: mask index underflow");
+    e->owner_cnt[o]--;
+    e->type_cnt[t]--;
+#else
     if (e->owner_cnt[o] > 0) e->owner_cnt[o]--;
     if (e->type_cnt[t]  > 0) e->type_cnt[t]--;
+#endif
     for (uint32_t m = mask; m != 0; m &= m - 1) {
         unsigned b = (unsigned)__builtin_ctz(m);
+#ifdef SYM_MEMDEBUG
+        if (e->bit_cnt[b] == 0)
+            PANIC("env: mask index underflow");
+        if (--e->bit_cnt[b] == 0)
+            e->active_mask_or &= ~(1u << b);
+#else
         if (e->bit_cnt[b] > 0 && --e->bit_cnt[b] == 0)
             e->active_mask_or &= ~(1u << b);
+#endif
     }
 }
 
-/* True only if NO entry can satisfy (mask & care) == want. A "false" means
- * "maybe": the caller must scan. `want` must be a subset of `care`. */
+/* True only if NO entry can satisfy (mask & care) == want.
+ * A "false" means "maybe": the caller must scan. `want` must be a subset of `care`. */
 static bool env_match_impossible(const struct env_device *e, uint32_t care, uint32_t want) {
     if ((e->active_mask_or & want) != want) return true;
     if ((care & ENV_MASK_OWNER_MASK) == ENV_MASK_OWNER_MASK &&
@@ -137,8 +151,7 @@ static inline bool env_visible(const struct env_entry *s, uint32_t care) {
 }
 
 /* Raw lookup: finds the live entry for a key whether or not it has expired.
- * There is at most one live entry per key (env_set reclaims an expired
- * same-key entry before inserting). */
+ * There is at most one live entry per key (env_set reclaims an expired same-key entry before inserting). */
 static struct env_entry *env_lookup(struct env_device *e,
                                     const char *ns, size_t ns_len,
                                     const char *name, size_t name_len) {
@@ -318,17 +331,12 @@ static int env_set(const char *ns, const char *name, const char *value,
     /* one timer read for the whole operation: expiry, TTL and bookkeeping all key off the same now. */
     uint64_t now = env_now(e);
 
-    /* An expired entry under the same key is garbage: collect it now so the key has exactly one live slot.
-     * This is not a side effect of a failed set(), the entry was already unreadable. */
     struct env_entry *existing = env_lookup(e, ns, ns_len, name, name_len);
-    if (existing != NULL && env_expired(now, existing)) {
-        env_reclaim(e, existing, ENV_RECLAIM_TIME);
-        existing = NULL;
-    }
+    bool expired_same_key = existing != NULL && env_expired(now, existing);
 
-    /* Policy validation, before anything is allocated or evicted.
+    /* Policy validation only for a live (non-expired) same-key entry.
      * These test the RAW mask against the unshifted ENV_FLAG_* constants. */
-    if (existing != NULL) {
+    if (existing != NULL && !expired_same_key) {
         uint32_t old = existing->mask;
         if (old & ENV_FLAG_READONLY)
             return ENV_READONLY;
@@ -336,11 +344,17 @@ static int env_set(const char *ns, const char *name, const char *value,
             return ENV_READONLY;
     }
 
-    /* Stage the new strings. Heap exhaustion fails here, before any eviction. */
+    /* Stage the new strings. Heap exhaustion fails here, before any reclaim or eviction. */
     char *n_ns = NULL, *n_name = NULL, *n_value = NULL;
     int st = env_stage_strings(ns, ns_len, name, name_len, value, value_len,
                                &n_ns, &n_name, &n_value);
     if (st != ENV_OK) return st;
+
+    /* Expired same-key entry was already unreadable; reclaim only after staging succeeds. */
+    if (expired_same_key) {
+        env_reclaim(e, existing, ENV_RECLAIM_TIME);
+        existing = NULL;
+    }
 
     /* Make room (all-or-nothing). */
     if (!env_make_room(e, now, footprint, existing, importance)) {
@@ -508,6 +522,8 @@ static int env_info(struct env_info *out) {
 static void env_emit(const struct env_entry *s,
                      char *ns_out, size_t ns_max,
                      char *name_out, size_t name_max) {
+    if (ns_out != NULL && ns_max == 0) return;
+    if (name_out != NULL && name_max == 0) return;
     if (ns_out != NULL) {
         size_t ns_copy = s->ns_len;
         if (ns_copy >= ns_max) ns_copy = ns_max - 1;
@@ -735,7 +751,9 @@ void env_init(size_t max_entries, size_t max_bytes) {
         .private_data = e,
         .owner_id     = BUS_ENV_ID,
     };
-    if (bus_register(&dev) != 0)
+    if (bus_register(&dev) != 0) {
         klog_warning("env: bus registration failed\n");
-    bus_test("env");
+    } else {
+        bus_test("env");
+    }
 }

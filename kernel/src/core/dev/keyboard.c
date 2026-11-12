@@ -48,6 +48,7 @@ static uint32_t ring_head;
 static uint32_t ring_tail;
 static bool     irq_hooked;
 
+// Keyboards own metric endpoints
 static volatile uint64_t kbd_keystrokes_total;   /* every scancode decoded (make and break) */
 static volatile uint64_t kbd_chars_total;        /* only KBD_CHAR events */
 static volatile uint64_t kbd_dropped_of;            /* ring_push overflowed */
@@ -56,10 +57,6 @@ static volatile uint8_t  kbd_last_char;          /* last KBD_CHAR out-value */
 static volatile uint8_t  kbd_last_scancode;      /* last raw make-code seen */
 static volatile uint64_t kbd_last_ticks;         /* tick at last event */
 
-static int kbd_publish_id = -1;  /* timer task id, or -1 */
-
-/* forward */
-static void kbd_publish_task(void *arg);
 
 static bool wait_input_clear(void) {
     for (int i = 0; i < KBD_SPIN_LIMIT; i++) {
@@ -231,13 +228,11 @@ bool kbd_init(void) {
             .private_data = NULL,
             .owner_id = BUS_KBD_ID,
         };
-        if (bus_register(&dev) != 0)
+        if (bus_register(&dev) != 0) {
             klog_warning("keyboard: bus registration failed\n");
-    /* verbose confirmation */
-    bus_test("keyboard");
-    /* ENV schedule the publish task; self-re-arming */
-    kbd_publish_id = timer_after(KBD_PUBLISH_MS, kbd_publish_task, NULL);
-
+        } else {
+            bus_test("keyboard");
+        }
     return true;
 }
 
@@ -416,74 +411,4 @@ uint8_t kbd_locks(void) {
 
 uint32_t kbd_dropped(void) {
     return (uint32_t)kbd_dropped_of;
-}
-
-/* ENV publish snapshot to kernel.dev.keyboard.*
- *
- * Runs as a timer task, so it's in thread context and may call env_set.
- * Snapshot is best-effort: if env isn't attached yet or a set fails, we
- * just skip that field, the next publish cycle will retry. */
-
-static void kbd_publish_snapshot(void) {
-    const struct env_ops *env = bus_env();
-    if (env == NULL)
-        return;
-
-    const char *ns = "kernel.dev.keyboard";
-    char buf[32];
-
-    /* mask: owner=keyboard, type varies per field, PINNED+READONLY.
-     * PRIVATE carries the lock bits for the `modifiers` entry specifically. */
-    uint32_t m_int  = env_mask_build(BUS_KBD_ID, ENV_TYPE_INT, ENV_FLAG_CACHEABLE, 0);
-    uint32_t m_str  = env_mask_build(BUS_KBD_ID, ENV_TYPE_STRING, ENV_FLAG_CACHEABLE, 0);
-    uint32_t m_hex  = env_mask_build(BUS_KBD_ID, ENV_TYPE_HEX, ENV_FLAG_CACHEABLE, 0);
-    uint32_t m_lock = env_mask_build(BUS_KBD_ID, ENV_TYPE_INT, ENV_FLAG_CACHEABLE, (uint16_t)kbd_locks_mod);
-
-    /* Each PUB_* variant matches the format to the actual value type,
-     * so the compiler's -Wformat sees the real argument type through ksnprintf. */
-    #define PUB_U(field, val, mask) do {                                   \
-        ksnprintf(buf, sizeof buf, "%llu", (unsigned long long)(val));      \
-        (void)env->set(ns, (field), buf, 0, 0, ENV_IMPORTANCE_DEFAULT, mask); \
-    } while (0)
-
-    #define PUB_X(field, val, mask) do {                                   \
-        ksnprintf(buf, sizeof buf, "0x%llx", (unsigned long long)(val));    \
-        (void)env->set(ns, (field), buf, 0, 0, ENV_IMPORTANCE_DEFAULT, mask); \
-    } while (0)
-
-    #define PUB_STR(field, ptr, mask) do {                                 \
-        (void)env->set(ns, (field), (ptr), 0, 0, ENV_IMPORTANCE_DEFAULT, mask); \
-    } while (0)
-
-    PUB_U("keystrokes", kbd_keystrokes_total, m_int);
-    PUB_U("chars",      kbd_chars_total,      m_int);
-    PUB_U("dropped",    kbd_dropped_of,       m_int);
-    PUB_X("scancode",   kbd_last_scancode,    m_hex);
-    PUB_U("ticks",      kbd_last_ticks,       m_int);
-
-    /* modifiers is a uint8_t; format as a bare hex byte with %x/unsigned int */
-    char lockbuf[8];
-    ksnprintf(lockbuf, sizeof lockbuf, "0x%x", (unsigned)kbd_locks_mod);
-    (void)env->set(ns, "modifiers", lockbuf, 0, 0, ENV_IMPORTANCE_DEFAULT, m_lock);
-
-    /* last_char: printable char, or "" if none yet.
-     * Empty string is valid env content (a 1-byte value),
-     * so scripts distinguish "no key yet" via last_ticks == 0 rather than via an empty string.
-     */
-    if (kbd_last_char != 0) {
-        char one[2] = { (char)kbd_last_char, '\0' };
-        (void)env->set(ns, "last_char", one, 0, 0, ENV_IMPORTANCE_DEFAULT, m_str);
-    }
-
-    #undef PUB
-}
-
-static void kbd_publish_task(void *arg) {
-    (void)arg;
-
-    /* Publish the snapshot first. */
-    kbd_publish_snapshot();
-
-    /* Then re-arm for the next cycle. */
-    kbd_publish_id = timer_after(KBD_PUBLISH_MS, kbd_publish_task, NULL);
 }
