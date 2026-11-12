@@ -87,4 +87,6 @@
 - `core/dev/metric.c`, `core/dev/metric.h`: added new metric service, uses `vfs.c` as endpoints, uses `env` to publish file locations (like Linux `/proc` concept).
 - `ext/top/top.c`: removed `keyboard` module, re-designed layout, doubled refresh rate to `2600`ms.
 
+- `ext/explorer/explorer.c`: patched with extra panel, for file contents.
+- `core/env.c`, `core/bus.c`, `core/tui.c`, `ext/fbcon/fbcon_manifest.c`: refined manifest `namespace` symbols to shorter versions for clarity (ex. `kernel.dev.console => console`)
  
