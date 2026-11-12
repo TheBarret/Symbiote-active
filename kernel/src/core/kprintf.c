@@ -2,36 +2,22 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 #include <lib/string.h>
 #include <core/dev/console.h>
 #include <core/kprintf.h>
-
 
 /* The formatter produces characters one at a time into an "emit" callback,
  * so the same code feeds both the consoles and string buffers. */
 typedef void (*emit_fn)(void *ctx, char c);
 
-/*  Emit helpers  */
+/*   Emit helpers   */
 
 static void emit_repeat(emit_fn emit, void *ctx, char c, size_t n) {
     for (size_t i = 0; i < n; i++)
         emit(ctx, c);
 }
 
-/* Field layout:
- *
- *   [leading space pad] [prefix] [leading zero pad] [digits pad] [body] [trailing space pad]
- *
- * The digits pad is what precision produces (a minimum digit count),
- * and it goes after the prefix so that "%.5x" of 0x1f is "0001f",  and "-%.3d" of -7 is "-007".
- * `numeric` distinguishes the cases where the digits pad applies from %s and %c, where it does not.
- *
- * `zero` pads with '0' between the prefix and the digits, at the field's request;
- * `prec` pads with '0' between the prefix and the digits, at the value's request.
- * Only one of them is typically non-zero, but if both are, the field-pad zeros go first,
- * then the digits-pad zeros: this matches what printf does for "%08.5x".
- * (Both are '0' today; if they ever differ, keep emit_field's order, not this comment's old wording.)
- */
 struct field {
     const char *prefix;  size_t plen;
     const char *body;    size_t blen;
@@ -63,12 +49,7 @@ static void emit_field(emit_fn emit, void *ctx, const struct field *f) {
         emit_repeat(emit, ctx, ' ', field_pad);
 }
 
-/* Write `v` in `base` into the END of tmp; returns the start of the digits.
- *
- * tmp must be large enough for the widest possible value.
- * For a 64-bit unsigned value:
- * 64 digits in base 2, 22 in base 8, 20 in base 10, 16 in base 16.
- * 65 bytes plus room for a leading NUL is safe. */
+/* Write `v` in `base` into the END of tmp; returns the start of the digits. */
 static char *utoa_end(unsigned long long v, unsigned base, bool upper, char *end) {
     const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
     char *p = end;
@@ -79,11 +60,10 @@ static char *utoa_end(unsigned long long v, unsigned base, bool upper, char *end
     return p;
 }
 
-/*  the formatter  */
+/*   the formatter   */
 
 void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
-    /* tmp is sized for the widest numeric conversion, base 2.
-     * Every conversion that uses utoa_end writes into the tail of this buffer. */
+    /* tmp is sized for the widest numeric conversion, base 2 (64 digits + safety). */
     char tmp[72];
     char *const tmp_end = tmp + sizeof tmp;
 
@@ -101,16 +81,30 @@ void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
             else break;
         }
 
-        /* Width: '*' or a decimal number. */
+        /* Width: '*' or a decimal number (with overflow protection). */
         size_t width = 0;
         if (*fmt == '*') {
             int w = va_arg(ap, int);
-            if (w < 0) { left = true; w = -w; }
-            width = (size_t)w;
+            if (w == INT_MIN) {
+                left = true;
+                width = (size_t)INT_MAX;
+            } else if (w < 0) {
+                left = true;
+                width = (size_t)(-w);
+            } else {
+                width = (size_t)w;
+            }
             fmt++;
         } else {
-            while (*fmt >= '0' && *fmt <= '9')
-                width = width * 10 + (size_t)(*fmt++ - '0');
+            while (*fmt >= '0' && *fmt <= '9') {
+                unsigned digit = (unsigned)(*fmt - '0');
+                if (width > (SIZE_MAX - digit) / 10) {
+                    width = SIZE_MAX; /* Clamp on overflow */
+                } else {
+                    width = width * 10 + digit;
+                }
+                fmt++;
+            }
         }
 
         /* Precision: '.' followed by '*' or a decimal number. */
@@ -122,13 +116,21 @@ void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
                 prec = p < 0 ? -1 : p;
                 fmt++;
             } else {
-                prec = 0;
-                while (*fmt >= '0' && *fmt <= '9')
-                    prec = prec * 10 + (*fmt++ - '0');
+                int p = 0;
+                while (*fmt >= '0' && *fmt <= '9') {
+                    int digit = *fmt - '0';
+                    if (p > (INT_MAX - digit) / 10) {
+                        p = INT_MAX;
+                    } else {
+                        p = p * 10 + digit;
+                    }
+                    fmt++;
+                }
+                prec = p;
             }
         }
 
-        /* Length modifier. All of l/ll/z mean 64-bit; h means 16-bit. */
+        /* Length modifier. */
         enum { LEN_NONE, LEN_H, LEN_L, LEN_LL, LEN_Z } len = LEN_NONE;
         for (;; fmt++) {
             if (*fmt == 'h') { len = LEN_H; }
@@ -162,14 +164,11 @@ void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
         case 'i': {
             long long v;
             switch (len) {
-            /* Reads long long for all 64-bit ints; safe on x86_64 SysV where
-             * long == long long, UB by the C standard otherwise. Do not port
-             * to 32-bit without splitting this branch. */
             case LEN_LL:
             case LEN_L:
             case LEN_Z: v = va_arg(ap, long long);          break;
-            case LEN_H: v = (short)va_arg(ap, int);         break;
-            default:    v = va_arg(ap, int);                break;
+            case LEN_H: v = (short)va_arg(ap, int);          break;
+            default:    v = va_arg(ap, int);                 break;
             }
             bool neg = v < 0;
             unsigned long long u =
@@ -204,7 +203,7 @@ void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
             case 'x': base = 16; break;
             case 'X': base = 16; upper = true; break;
             case 'b': base =  2; break;
-            default:  base = 10; break; /* unreachable */
+            default:  base = 10; break;
             }
             char *p = utoa_end(v, base, upper, tmp_end);
             const struct field f = {
@@ -228,9 +227,8 @@ void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
             emit(ctx, '%');
             break;
         case '\0':
-            return;                     /* format string ended after a '%' */
+            return;
         default:
-            /* Unknown conversion: echo it literally so a typo is visible. */
             emit(ctx, '%');
             emit(ctx, *fmt);
             break;
@@ -238,7 +236,7 @@ void kvformat(kemit_fn emit, void *ctx, const char *fmt, va_list ap) {
     }
 }
 
-/*  sink 1: the consoles (buffered, flushed in chunks)  */
+/*   sink 1: the consoles (buffered, flushed in chunks)   */
 
 struct con_sink {
     char buf[128];
@@ -254,10 +252,10 @@ static void con_flush(struct con_sink *s) {
 
 static void con_emit(void *ctx, char c) {
     struct con_sink *s = ctx;
-    if (s->len < sizeof s->buf)
-        s->buf[s->len++] = c;
-    if (s->len == sizeof s->buf)
+    if (s->len >= sizeof(s->buf)) {
         con_flush(s);
+    }
+    s->buf[s->len++] = c;
 }
 
 void kvprintf(const char *fmt, va_list ap) {
@@ -273,22 +271,20 @@ void kprintf(const char *fmt, ...) {
     va_end(ap);
 }
 
-/*  sink 2: a caller-supplied string buffer  */
+/*   sink 2: a caller-supplied string buffer   */
 
 struct str_sink {
     char *buf;
     size_t cap;
-    size_t len;     /* counts every character, even ones that did not fit */
+    size_t len;
 };
 
 static void str_emit(void *ctx, char c) {
     struct str_sink *s = ctx;
-    /* Leave room for the terminating NUL:
-     * write only when the character and the NUL both fit.
-     * s->len still advances so the return value is the would-be length, matching snprintf. */
     if (s->cap && s->len + 1 < s->cap)
         s->buf[s->len] = c;
-    s->len++;
+    if (s->len < SIZE_MAX)
+        s->len++;
 }
 
 int kvsnprintf(char *buf, size_t cap, const char *fmt, va_list ap) {
@@ -296,10 +292,7 @@ int kvsnprintf(char *buf, size_t cap, const char *fmt, va_list ap) {
     kvformat(str_emit, &s, fmt, ap);
     if (cap)
         buf[s.len < cap ? s.len : cap - 1] = '\0';
-    /* s.len can exceed INT_MAX for pathological inputs;
-     * clamp so the return value stays a valid int.
-     * A caller that cares about truncation checks "return >= cap", not the exact value. */
-    return s.len > (size_t)INT32_MAX ? INT32_MAX : (int)s.len;
+    return s.len > (size_t)INT_MAX ? INT_MAX : (int)s.len;
 }
 
 int ksnprintf(char *buf, size_t cap, const char *fmt, ...) {
