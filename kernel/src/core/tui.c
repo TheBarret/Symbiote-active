@@ -87,8 +87,8 @@ bool tui_begin(void) {
     /* get dimension from env store or fallback on defaults */
     tui_w = 100; tui_h = 25;                     /* fallback = 100x25 */
     int c = 0, r = 0;
-    if (tui_fetch_resolution("kernel.dev.console", "cols", &c)) tui_w = c;
-    if (tui_fetch_resolution("kernel.dev.console", "rows", &r)) tui_h = r;
+    if (tui_fetch_resolution("console", "cols", &c)) tui_w = c;
+    if (tui_fetch_resolution("console", "rows", &r)) tui_h = r;
     if (tui_w < 80) tui_w = 80; // validate both
     if (tui_h < 24) tui_h = 24;
 
