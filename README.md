@@ -170,6 +170,7 @@ registered on the bus as `BUS_CLASS_ENV` and reached through `bus_env()`.
 
 <img width="1286" height="863" alt="envtool.viewer" src="https://github.com/user-attachments/assets/6e8569b9-bebb-40a7-853a-00ed1ad079f7" />  
 
+*at console run:`> envtool inspect` to load environment inspection tool*  
 
 Per-entry policy:  
 
