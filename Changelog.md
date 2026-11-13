@@ -96,5 +96,7 @@
 
 - `ext/proxy/proxy.c`, `ext/proxy/proxy.h`, `ext/proxy/proxytest.c`: reshaped and patched for better error handling, added proxy tester.
 
-- `core/arch/*.*`: architecture branch marked as stable on `0.1.2` codebase.
+- `core/arch/*.*`: audited and marked as stable on `0.1.2` codebase.
+- `core/dev/*.*`: audited and marked as stable on `0.1.2` codebase.
+- `core/*.*`: audited and marked as stable on `0.1.2` codebase.
 ---
