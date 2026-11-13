@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* codebase: 0.1.2 */
+
 /* Mask Contracts
  *
  * The environment store treats this 32-bit field as entirely opaque.

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* codebase: 0.1.2 */
 /* incorrect settings can result in unpredictable behaviors!  */
 
 /* Serial settings

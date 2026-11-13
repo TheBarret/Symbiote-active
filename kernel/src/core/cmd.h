@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* codebase: 0.1.2 */
+
 /* PLUG SLOT: shell command.
  *
  * A command is one descriptor in the ".symbiote_cmd" linker section,

@@ -3,7 +3,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <core/version.h>   /* pulls in config.h: BUS_MAX_DEVICES */
+#include <core/version.h>   /* REF: config.h: BUS_MAX_DEVICES */
+
+/* codebase: 0.1.2 */
 
 /* Software bus: a name -> ops registry, linear with the core.
  *

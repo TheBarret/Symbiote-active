@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+/* codebase: 0.1.2 */
+
 /* Formatted output to every console.
  *
  * Supported conversions:

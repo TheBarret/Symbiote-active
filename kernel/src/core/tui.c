@@ -15,6 +15,8 @@
 #include <core/tui.h>
 #include <core/mask.h>
 
+/* codebase: 0.1.2 */
+
 #define TUI_FLUSH_BUF 4096
 #define TUI_FLUSH_DRAIN_AT (TUI_FLUSH_BUF - 64) /* Generous safety headroom */
 

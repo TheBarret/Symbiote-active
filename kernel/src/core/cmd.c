@@ -1,11 +1,13 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <lib/mem.h>
+#include <lib/string.h>
 #include <core/version.h>
 #include <core/cmd.h>
 #include <core/kprintf.h>
-#include <lib/mem.h>
-#include <lib/string.h>
+
+/* codebase: 0.1.2 */
 
 /* Provided by the linker script (linker-scripts/x86_64.lds). */
 extern const struct sym_cmd __symbiote_cmd_start[];

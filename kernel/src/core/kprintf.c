@@ -7,6 +7,8 @@
 #include <core/dev/console.h>
 #include <core/kprintf.h>
 
+/* codebase: 0.1.2 */
+
 /* The formatter produces characters one at a time into an "emit" callback,
  * so the same code feeds both the consoles and string buffers. */
 typedef void (*emit_fn)(void *ctx, char c);

@@ -9,6 +9,8 @@
 #include <core/kprintf.h>
 #include <core/panic.h>
 
+/* codebase: 0.1.2 */
+
 #define KERNEL_HALF 0xffff800000000000ULL   /* kernel addresses live above this */
 #define MAX_FRAMES  16
 

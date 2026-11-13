@@ -8,6 +8,8 @@
 #include <core/dev/timer.h>
 #include <core/dev/keyboard.h>
 
+/* codebase: 0.1.2 */
+
 /* Text-based User Interface
  *
  * Two cell grids (front and back), a rect-based drawing API,

@@ -4,6 +4,8 @@
 #include <core/ext.h>
 #include <core/klog.h>
 
+/* codebase: 0.1.2 */
+
 /* Provided by the linker script (linker-scripts/x86_64.lds). */
 extern const struct sym_ext __symbiote_ext_start[];
 extern const struct sym_ext __symbiote_ext_end[];

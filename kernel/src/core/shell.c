@@ -11,6 +11,8 @@
 #include <core/kprintf.h>
 #include <core/shell.h>
 
+/* codebase: 0.1.2 */
+
 #define SHELL_ARG_MAX   (CMD_MAX_ARGS + 1)
 
 /*  state  */

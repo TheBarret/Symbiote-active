@@ -1,4 +1,3 @@
-#include "klog.h"
 #include <stddef.h>
 #include <lib/string.h>
 #include <core/dev/console.h>
@@ -9,6 +8,8 @@
 #include <core/klog.h>
 #include <core/bus.h>
 #include <core/mask.h>
+
+/* codebase: 0.1.2 */
 
 /* Software bus: a name -> ops registry, linear with the core.
  *

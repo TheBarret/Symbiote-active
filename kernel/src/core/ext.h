@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+/* codebase: 0.1.2 */
+
 /* An extension is one descriptor in the ".symbiote_ext" linker section.
  * The core never needs a list of extensions: the linker gathers them.
  * To add one, drop a .c file in src/ext/ and name it in EXTENSIONS.

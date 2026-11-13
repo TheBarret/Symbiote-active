@@ -3,7 +3,9 @@
 
 #include "core/version.h"
 
-//Ref: core/version.h for settings
+/* codebase: 0.1.2 */
+
+//REF: core/version.h for defined KLOG templates
 
 
 /* klog */

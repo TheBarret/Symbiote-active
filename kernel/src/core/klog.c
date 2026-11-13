@@ -5,6 +5,7 @@
 #include <core/klog.h>
 #include <core/kprintf.h>
 
+/* codebase: 0.1.2 */
 
 /* Logging + rdtsc helpers  */
 

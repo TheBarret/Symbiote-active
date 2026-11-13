@@ -1,6 +1,8 @@
 #ifndef CORE_SHELL_H
 #define CORE_SHELL_H
 
+/* codebase: 0.1.2 */
+
 /* Interactive command loop.
  *
  * The shell is now a state machine ticked by the kernel's main loop,
