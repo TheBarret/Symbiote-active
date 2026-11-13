@@ -7,9 +7,9 @@
 
 /* Proxy: the single mediation boundary between the interpreter and the bus.
  *
- * The interpreter NEVER holds a raw ops pointer. It holds a uint32_t handle
- * that only this device can mint, validate, or invalidate. Every capability
- * the script can invoke goes through proxy_call(), which:
+ * The interpreter NEVER holds a raw ops pointer.
+ * It holds a uint32_t handle that only this device can mint, validate, or invalidate.
+ * Every capability the script can invoke goes through proxy_call(), which:
  *   1. re-validates the handle against the bus (staleness),
  *   2. checks the op is whitelisted for the handle's class,
  *   3. validates the arg payload,
@@ -18,6 +18,11 @@
  * Handles are small integers, opaque to callers.
  * A handle whose backing device is gone returns PROXY_ESTALE — never a dangling pointer.
  *
+ * Handle recycling: handles are slot indices in [0, PROXY_MAX) and are reused after unbind.
+ * A script that holds a stale handle across a bind cycle may find it now refers to a different device (same class).
+ * Scripts must not retain handles across unbind.
+ *
+ * ret_len contract: on any non-PROXY_OK return, *ret_len is set to 0 and the caller must not read the contents of `ret`.
  * The catalogue of exposed ops per class lives in proxy.c, one switch per class.
  * What is not in that switch is not reachable from a script.
  */
@@ -31,6 +36,7 @@ enum proxy_result {
     PROXY_ENODEV,       /* bind: no such device */
     PROXY_EFULL,        /* bind: handle table full */
     PROXY_EINTERNAL,
+    PROXY_ENOENT,       /* queried key/iter is absent; not an error */
 };
 
 /* Op selectors are per-class.
@@ -39,19 +45,19 @@ enum proxy_result {
 
 enum proxy_console_op {
     PROXY_CONSOLE_WRITE = 1,
-    PROXY_CONSOLE_CLEAR = 2,
+    PROXY_CONSOLE_CLEAR = 2,   /* not yet implemented: returns PROXY_EBADOP */
 };
 
 enum proxy_env_op {
     PROXY_ENV_GET         = 1,   /* args: ns \0 name; ret: value bytes */
     PROXY_ENV_PEEK        = 2,   /* same, does not consume budget */
-    PROXY_ENV_SET         = 3,   /* args: ns \0 name \0 value; mask built by proxy */
+    PROXY_ENV_SET         = 3,   /* args: ns \0 name \0 value; ns must be in writable allowlist */
     PROXY_ENV_UNSET       = 4,   /* args: ns \0 name; proxy checks ownership */
-    PROXY_ENV_IS_EXIST    = 5,   /* args: ns \0 name; ret: empty on ENV_OK */
+    PROXY_ENV_IS_EXIST    = 5,   /* args: ns \0 name; PROXY_OK = exists, PROXY_ENOENT = absent */
     PROXY_ENV_STAT        = 6,   /* args: ns \0 name; ret: encoded stat */
-    PROXY_ENV_LIST        = 7,   /* args: ns \0 iter(8 bytes); ret: name \0 iter */
-    PROXY_ENV_LIST_ALL    = 8,   /* args: iter; ret: ns \0 name \0 iter */
-    PROXY_ENV_LIST_MASK   = 9,   /* args: mask(4) iter(8); ret: ns \0 name \0 iter */
+    PROXY_ENV_LIST        = 7,   /* args: ns \0 iter(8 bytes); ret: name \0 iter; PROXY_ENOENT = end */
+    PROXY_ENV_LIST_ALL    = 8,   /* args: iter; ret: ns \0 name \0 iter; PROXY_ENOENT = end */
+    PROXY_ENV_LIST_MASK   = 9,   /* args: mask(4) iter(8); ret: ns \0 name \0 iter; PROXY_ENOENT = end */
     PROXY_ENV_COUNT_MASK  = 10,  /* args: mask(4); ret: count(8) */
     PROXY_ENV_INFO        = 11,  /* args: none; ret: encoded info */
     /* no drop_namespace */
@@ -68,7 +74,8 @@ struct proxy_ops {
     /* Invoke a whitelisted op on a bound handle.
      *   args/args_len   -> op-specific payload (see enum above)
      *   ret/ret_max     -> output buffer
-     *   ret_len         -> actual bytes written (may be NULL if unused)
+     *   ret_len         -> actual bytes written (may be NULL if unused).
+     *                      Set to 0 on any non-PROXY_OK return.
      * Returns a PROXY_* code. */
     int (*call)(uint32_t handle, uint16_t op,
                 const uint8_t *args, size_t args_len,
