@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include "core/version.h"
 
+// codebase: 0.1.2
+
 /* 8259 PIC pair. This is the seam an APIC would replace:
  * callers only use mask / unmask / eoi, so swapping controllers changes pic.c and nothing else. */
 

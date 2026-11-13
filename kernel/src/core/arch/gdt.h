@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+// codebase: 0.1.2
+
 /* Global Descriptor Table + Task State Segment.
  *
  * Symbiote runs everything in ring 0, so there are no user segments:

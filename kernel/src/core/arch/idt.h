@@ -1,6 +1,8 @@
 #ifndef CORE_IDT_H
 #define CORE_IDT_H
 
+// codebase: 0.1.2
+
 /* Interrupt Descriptor Table: all 256 vectors.
  * Every vector is populated with an explicit handler stub so unexpected
  * interrupts or exceptions route to the dispatch handler instead of causing

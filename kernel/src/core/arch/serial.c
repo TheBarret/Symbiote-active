@@ -5,6 +5,8 @@
 #include <core/arch/serial.h>
 #include <core/dev/console.h>
 
+// codebase: 0.1.2
+
 static void serial_putc(char c) {
     /* Wait (bounded) until the transmit holding register is empty.
      * A missing port reads back 0xFF, which also looks "ready", so this cannot hang. */

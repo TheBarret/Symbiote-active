@@ -10,6 +10,8 @@
  * When ECX is 0, the crystal frequency has to come from the
  * family/model table below. */
 
+// codebase: 0.1.2
+
 /* Nominal core crystal clock for common Intel families, in Hz.
  * Values from the Intel SDM's table for leaf 0x15 when ECX is 0.
  * Returns 0 for every AMD CPU today; klog_init falls back to 2.5 GHz.

@@ -6,6 +6,7 @@
 #include <core/arch/pic.h>
 #include <core/panic.h>
 
+// codebase: 0.1.2
 
 _Static_assert(sizeof(struct isr_frame) == 22 * 8, "isr_frame must match isr_common's pushes");
 

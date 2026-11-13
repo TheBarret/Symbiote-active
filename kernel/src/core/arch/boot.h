@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <limine.h>
 
+// codebase: 0.1.2
+
 /* True if the bootloader speaks the protocol revision we asked for. */
 bool boot_protocol_ok(void);
 

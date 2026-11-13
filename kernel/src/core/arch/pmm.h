@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "core/version.h"
 
+// codebase: 0.1.2
+
 /* Physical memory manager.
  *
  * A bitmap with one bit per 4 KiB frame.

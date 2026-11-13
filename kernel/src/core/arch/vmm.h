@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <core/version.h>
 
+// codebase: 0.1.2
+
 /* Virtual memory manager.
  *
  * Takes ownership of the address space by cloning Limine's page tables into PMM-backed frames,

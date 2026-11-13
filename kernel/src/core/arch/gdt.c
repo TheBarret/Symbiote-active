@@ -2,6 +2,8 @@
 #include <core/arch/cpu.h>
 #include <core/arch/gdt.h>
 
+// codebase: 0.1.2
+
 /* 64-bit Task State Segment (AMD64 architecture). */
 struct tss {
     uint32_t reserved0;

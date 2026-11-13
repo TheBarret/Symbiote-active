@@ -8,6 +8,8 @@
  * and the linker script keeps the section.
  * The official limine.h provides the correct magic numbers, so we never hand-type them. */
 
+// codebase: 0.1.2
+
 __attribute__((used, section(".limine_requests")))
 static volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(6);
 

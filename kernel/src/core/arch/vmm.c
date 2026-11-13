@@ -9,6 +9,7 @@
 #include <core/klog.h>
 #include <core/panic.h>
 
+// codebase: 0.1.2
 
 /* x86_64 4-level paging. Limine boots us in 4-level mode by default. */
 

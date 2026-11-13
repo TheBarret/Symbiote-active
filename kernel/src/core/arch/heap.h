@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+// codebase: 0.1.2
+
 /* Kernel heap: chunked free list, block headers, immediate coalescing.
  * Chunks from pmm_alloc_contig, reached via HHDM, never returned to PMM.
  * First-fit, 16-byte aligned, no locking (single-threaded boot only).
@@ -20,6 +22,7 @@
  - heap_get_stats uses a local ps to avoid recomputing BLOCK_PAYLOAD_SIZE(b) three times.
 
  * */
+
 
 void heap_init(void);                        /* panics if PMM has no frames; double-call is warn-no-op */
 void *kmalloc(size_t size);                  /* 16-aligned, NULL on fail, undefined contents */

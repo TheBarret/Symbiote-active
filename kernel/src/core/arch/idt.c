@@ -3,6 +3,8 @@
 #include <core/arch/gdt.h>
 #include <core/arch/idt.h>
 
+// codebase: 0.1.2
+
 /* 64-bit Interrupt Gate descriptor (16 bytes). */
 struct idt_gate {
     uint16_t offset_lo;

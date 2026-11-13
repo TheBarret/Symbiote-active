@@ -9,6 +9,8 @@
 #include <core/klog.h>
 #include <core/panic.h>
 
+// codebase: 0.1.2
+
 // Moved to: config.h
 //#define HEAP_CHUNK_SIZE     (256 * 1024)
 //#define HEAP_ALIGN          16

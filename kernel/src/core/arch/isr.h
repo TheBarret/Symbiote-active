@@ -4,10 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// codebase: 0.1.2
+
 /* Everything the CPU and isr_stubs.S saved when a vector fired.
- * Field order is the exact reverse of the push order in isr_common, lowest address first:
- * change one side and you MUST change the other (the static assert in isr.c
- * only catches a wrong size, not a swapped pair). */
+ * Field order is the exact reverse of the push order in isr_common,
+ * lowest address first: change one side and you MUST change the other
+ * (the static assert in isr.c only catches a wrong size, not a swapped pair). */
 struct isr_frame {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
     uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;

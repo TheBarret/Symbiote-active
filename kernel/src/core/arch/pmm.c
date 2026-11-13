@@ -8,6 +8,7 @@
 #include <core/kprintf.h>
 #include <core/panic.h>
 
+// codebase: 0.1.2
 
 /* Limine sorts the map by base and guarantees USABLE and
  * BOOTLOADER_RECLAIMABLE entries are page-aligned and non-overlapping.
