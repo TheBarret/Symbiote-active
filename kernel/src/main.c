@@ -1,6 +1,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Audited and marked as stable on `0.1.2` codebase. */
+
 /* kernel core */
 #include <core/version.h>           // Master version, includes master config.h
 #include <core/arch/boot.h>         // Limine API vectors and helpers
