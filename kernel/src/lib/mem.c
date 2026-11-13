@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <lib/mem.h>
 
+/* codebase: 0.1.2 */
+
 /* Do NOT rename or remove these!
  *  See mem.h. The macros from mem.h are undone here so we define the real functions, not the builtins.
  */

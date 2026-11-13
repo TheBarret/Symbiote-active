@@ -1,10 +1,11 @@
 #ifndef LIB_MEM_H
 #define LIB_MEM_H
 
-
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+/* codebase: 0.1.2 */
 
 /* The compiler is allowed to emit calls to these four even if you never wrote one,
    so they MUST exist and MUST behave exactly like the C standard says. */

@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <lib/string.h>
 
+/* codebase: 0.1.2 */
+
 size_t strlen(const char *s) {
     size_t n = 0;
     while (s[n] != '\0')
