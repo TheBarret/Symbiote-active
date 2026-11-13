@@ -8,6 +8,8 @@
 #include <core/version.h>
 #include <core/bus.h>
 
+/* codebase: 0.1.2 */
+
 /* Metrics Subsystem
  *
  * Collects low-interval kernel telemetry (free memory, used memory, interrupts free/used)

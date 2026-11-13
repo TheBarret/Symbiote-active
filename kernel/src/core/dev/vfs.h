@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <core/version.h>
 
+/* codebase: 0.1.2 */
+
 /* Virtual file system.
  *
  * One interface, one implementation (ramfs) for now.
@@ -76,8 +78,6 @@ int vfs_stat(const char *path, struct vfs_stat *out);
  * The caller must provide a buffer of at least VFS_NAME_MAX + 1 bytes.
  * Returns false when there are no more entries. */
 bool vfs_readdir(const char *path, size_t *iter, char *name);
-
-
 
 /* bus back-end */
 struct vfs_ops {

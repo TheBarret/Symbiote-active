@@ -12,6 +12,7 @@
 #include <core/klog.h>
 #include <core/bus.h>
 
+/* codebase: 0.1.2 */
 
 // Moved to ref: core/version.h
 //#define PIT_FREQ  1193182ull        /* Hz, the PIT's input clock */

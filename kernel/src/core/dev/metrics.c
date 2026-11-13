@@ -14,6 +14,8 @@
 #include <core/kprintf.h>
 #include <core/dev/metrics.h>
 
+/* codebase: 0.1.2 */
+
 /* Metric configuration and state */
 struct metrics_device {
     uint64_t interval_ms;

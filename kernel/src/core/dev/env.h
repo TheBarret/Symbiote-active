@@ -7,6 +7,8 @@
 #include <core/version.h>
 #include <core/bus.h>
 
+/* codebase: 0.1.2 */
+
 /* Symbiote environment store ("ring collector")
  *
  * A bounded, fixed-capacity table of (namespace, name) -> value entries.

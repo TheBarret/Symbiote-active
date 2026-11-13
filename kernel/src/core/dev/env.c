@@ -12,6 +12,8 @@
 #include <core/klog.h>
 #include <core/bus.h>
 
+/* codebase: 0.1.2 */
+
 /* entry */
 struct env_entry {
     char         *ns;           /* BLOCK BASE: ns, name and value are three

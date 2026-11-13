@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* codebase: 0.1.2 */
+
 /* Interrupt-driven PS/2 keyboard driver
  * - LED sync
  * - multi-byte prefix state machine

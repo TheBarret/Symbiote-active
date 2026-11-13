@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "core/version.h"
 
+/* codebase: 0.1.2 */
+
 /* PIT channel 0 as the system tick. Needs idt_init() and pic_init();
  * the tick only starts arriving once interrupts are enabled with cpu_sti().
  * Double-call is warn-no-op. */

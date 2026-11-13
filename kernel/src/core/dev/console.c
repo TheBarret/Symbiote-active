@@ -4,6 +4,8 @@
 #include <core/dev/console.h>
 #include <core/klog.h>
 
+/* codebase: 0.1.2 */
+
 // Moved to ref: core/version.h
 //#define CONSOLE_MAX 4
 //#define LOG_SIZE    16384   /* boot log kept in RAM for late-attaching consoles */
@@ -30,7 +32,7 @@ void console_init(void) {
         .version      = 1,
         .ops          = (void *)&console_bus_ops,
         .private_data = NULL,
-        .owner_id     = 1,
+        .owner_id     = BUS_CONSOLE_ID,
     };
     bus_register(&dev);
     bus_test("console");

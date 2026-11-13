@@ -12,6 +12,8 @@
 #include <core/kprintf.h>
 #include <core/klog.h>
 
+/* codebase: 0.1.2 */
+
 /* Controller ports and status bits */
 #define KBD_DATA    0x60
 #define KBD_STATUS  0x64

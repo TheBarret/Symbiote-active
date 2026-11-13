@@ -12,6 +12,7 @@
 #include <core/klog.h>
 #include <core/panic.h>
 
+/* codebase: 0.1.2 */
 
 /*  global lock
  *

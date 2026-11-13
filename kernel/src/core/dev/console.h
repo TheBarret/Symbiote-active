@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <core/bus.h>
 
+/* codebase: 0.1.2 */
+
 /* Plugin console module */
 struct console_ops {
     const char *name;
