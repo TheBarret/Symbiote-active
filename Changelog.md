@@ -95,4 +95,6 @@
 - `core/dev/metric.c`, `core/dev/metric.h`: added `timer` endpoints , `task_pending, task_active`.
 
 - `ext/proxy/proxy.c`, `ext/proxy/proxy.h`, `ext/proxy/proxytest.c`: reshaped and patched for better error handling, added proxy tester.
+
+- `core/arch/*.*`: architecture branch marked as stable on `0.1.2` codebase.
 ---
