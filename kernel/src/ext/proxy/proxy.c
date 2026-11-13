@@ -15,6 +15,17 @@
 
 #define PROXY_MAX 32
 
+/* Namespaces a script is allowed to write into via PROXY_ENV_SET.
+ * Extend deliberately: each new prefix is a new script-visible capability.
+ * Read ops (GET, PEEK, STAT, LIST*) are not namespace-gated;
+ * SECRET entries remain hidden by env's own visibility rule. */
+static const char *const proxy_env_writable_ns[] = {
+    "script.",
+    "user.",
+};
+#define PROXY_ENV_WRITABLE_NS_COUNT \
+    (sizeof(proxy_env_writable_ns) / sizeof(proxy_env_writable_ns[0]))
+
 struct proxy_slot {
     bool     live;
     uint16_t class;
@@ -75,6 +86,16 @@ static bool put_str(uint8_t *ret, size_t ret_max, size_t *pos, const char *s) {
     return true;
 }
 
+/* True if `ns` matches one of the writable prefixes. */
+static bool ns_is_writable(const char *ns) {
+    for (size_t i = 0; i < PROXY_ENV_WRITABLE_NS_COUNT; i++) {
+        size_t plen = strlen(proxy_env_writable_ns[i]);
+        if (strncmp(ns, proxy_env_writable_ns[i], plen) == 0)
+            return true;
+    }
+    return false;
+}
+
 /*  per-class dispatch  */
 
 static int console_call(struct proxy_slot *s, uint16_t op,
@@ -88,16 +109,15 @@ static int console_call(struct proxy_slot *s, uint16_t op,
         size_t pos = 0;
         const char *str = arg_next(args, args_len, &pos);
         if (str == NULL) return PROXY_EBADARG;
-        /* console_ops->write takes (const char *); adapt if signature differs */
         size_t len = strlen(str);
         ops->write(str, len);
         if (ret_len) *ret_len = 0;
         return PROXY_OK;
     }
     case PROXY_CONSOLE_CLEAR:
-        //ops->clear();
-        if (ret_len) *ret_len = 0;
-        return PROXY_OK;
+        /* NOT IMPLEMENTED YET */
+
+        return PROXY_EBADOP;
     default:
         return PROXY_EBADOP;
     }
@@ -121,7 +141,9 @@ static int env_call(struct proxy_slot *s, uint16_t op,
                ? ops->get(ns, name, (char *)ret, ret_max, &got)
                : ops->peek(ns, name, (char *)ret, ret_max, &got);
         if (rc == ENV_BUFFER_TOO_SMALL) return PROXY_EBADARG;
-        if (rc != ENV_OK) return PROXY_EINTERNAL;
+        if (rc == ENV_NOT_FOUND)        return PROXY_ENOENT;
+        if (rc == ENV_INVALID_ARGS)     return PROXY_EBADARG;
+        if (rc != ENV_OK)               return PROXY_EINTERNAL;
         if (ret_len) *ret_len = got;
         return PROXY_OK;
     }
@@ -131,10 +153,14 @@ static int env_call(struct proxy_slot *s, uint16_t op,
         const char *name  = arg_next(args, args_len, &pos);
         const char *value = arg_next(args, args_len, &pos);
         if (!ns || !name || !value) return PROXY_EBADARG;
+        if (!ns_is_writable(ns)) return PROXY_EBADOP;
         /* Proxy owns mask construction: script cannot forge owner/type/flags. */
         uint32_t mask = env_mask_build((uint16_t)BUS_PROXY, ENV_TYPE_STRING, 0, 0);
         int rc = ops->set(ns, name, value, 0, 0, 0, mask);
-        if (rc != ENV_OK) return PROXY_EINTERNAL;
+        if (rc == ENV_READONLY)    return PROXY_EBADOP;
+        if (rc == ENV_NO_SPACE)    return PROXY_EINTERNAL;
+        if (rc == ENV_INVALID_ARGS) return PROXY_EBADARG;
+        if (rc != ENV_OK)           return PROXY_EINTERNAL;
         if (ret_len) *ret_len = 0;
         return PROXY_OK;
     }
@@ -143,13 +169,16 @@ static int env_call(struct proxy_slot *s, uint16_t op,
         const char *ns   = arg_next(args, args_len, &pos);
         const char *name = arg_next(args, args_len, &pos);
         if (!ns || !name) return PROXY_EBADARG;
-        /* Ownership gate: only entries the interpreter owns may be unset. */
+        if (!ns_is_writable(ns)) return PROXY_EBADOP;
         struct env_stat st;
-        if (ops->stat(ns, name, &st) != ENV_OK) return PROXY_EINTERNAL;
+        int src = ops->stat(ns, name, &st);
+        if (src == ENV_NOT_FOUND) return PROXY_ENOENT;
+        if (src != ENV_OK)        return PROXY_EINTERNAL;
         if (env_mask_owner(st.mask) != BUS_PROXY)
             return PROXY_EBADOP;
         int rc = ops->unset(ns, name);
-        if (rc != ENV_OK) return PROXY_EINTERNAL;
+        if (rc == ENV_NOT_FOUND) return PROXY_ENOENT;
+        if (rc != ENV_OK)        return PROXY_EINTERNAL;
         if (ret_len) *ret_len = 0;
         return PROXY_OK;
     }
@@ -159,10 +188,9 @@ static int env_call(struct proxy_slot *s, uint16_t op,
         const char *name = arg_next(args, args_len, &pos);
         if (!ns || !name) return PROXY_EBADARG;
         int rc = ops->is_exist(ns, name);
-        if (rc != ENV_OK && rc != ENV_NOT_FOUND) return PROXY_EINTERNAL;
-        if (rc == ENV_NOT_FOUND) return PROXY_EINTERNAL;   /* or PROXY_ENOENT later */
-        if (ret_len) *ret_len = 0;
-        return PROXY_OK;
+        if (rc == ENV_OK)         { if (ret_len) *ret_len = 0; return PROXY_OK; }
+        if (rc == ENV_NOT_FOUND)  return PROXY_ENOENT;
+        return PROXY_EINTERNAL;
     }
     case PROXY_ENV_STAT: {
         size_t pos = 0;
@@ -170,14 +198,16 @@ static int env_call(struct proxy_slot *s, uint16_t op,
         const char *name = arg_next(args, args_len, &pos);
         if (!ns || !name) return PROXY_EBADARG;
         struct env_stat st;
-        if (ops->stat(ns, name, &st) != ENV_OK) return PROXY_EINTERNAL;
-        if (!put_u32(ret, ret_max, &out_pos, st.value_len))       return PROXY_EBADARG;
-        if (!put_u32(ret, ret_max, &out_pos, st.access_remaining))return PROXY_EBADARG;
-        if (!put_u64(ret, ret_max, &out_pos, st.has_ttl ? 1 : 0)) return PROXY_EBADARG;
-        if (!put_u64(ret, ret_max, &out_pos, st.ttl_remaining))   return PROXY_EBADARG;
-        if (!put_u64(ret, ret_max, &out_pos, st.last_access))     return PROXY_EBADARG;
-        if (!put_u32(ret, ret_max, &out_pos, st.importance))      return PROXY_EBADARG;
-        if (!put_u32(ret, ret_max, &out_pos, st.mask))            return PROXY_EBADARG;
+        int rc = ops->stat(ns, name, &st);
+        if (rc == ENV_NOT_FOUND) return PROXY_ENOENT;
+        if (rc != ENV_OK)        return PROXY_EINTERNAL;
+        if (!put_u32(ret, ret_max, &out_pos, st.value_len))        return PROXY_EBADARG;
+        if (!put_u32(ret, ret_max, &out_pos, st.access_remaining)) return PROXY_EBADARG;
+        if (!put_u64(ret, ret_max, &out_pos, st.has_ttl ? 1 : 0))  return PROXY_EBADARG;
+        if (!put_u64(ret, ret_max, &out_pos, st.ttl_remaining))    return PROXY_EBADARG;
+        if (!put_u64(ret, ret_max, &out_pos, st.last_access))      return PROXY_EBADARG;
+        if (!put_u32(ret, ret_max, &out_pos, st.importance))       return PROXY_EBADARG;
+        if (!put_u32(ret, ret_max, &out_pos, st.mask))             return PROXY_EBADARG;
         if (ret_len) *ret_len = out_pos;
         return PROXY_OK;
     }
@@ -189,10 +219,10 @@ static int env_call(struct proxy_slot *s, uint16_t op,
         size_t iter = (size_t)it;
         char namebuf[ENV_NAME_MAX + 1];
         int rc = ops->list(ns, &iter, namebuf, sizeof namebuf);
-        if (rc != ENV_OK && rc != ENV_NOT_FOUND) return PROXY_EINTERNAL;
-        if (rc == ENV_NOT_FOUND) return PROXY_EINTERNAL;
-        if (!put_str(ret, ret_max, &out_pos, namebuf))       return PROXY_EBADARG;
-        if (!put_u64(ret, ret_max, &out_pos, (uint64_t)iter))return PROXY_EBADARG;
+        if (rc == ENV_NOT_FOUND) return PROXY_ENOENT;
+        if (rc != ENV_OK)        return PROXY_EINTERNAL;
+        if (!put_str(ret, ret_max, &out_pos, namebuf))        return PROXY_EBADARG;
+        if (!put_u64(ret, ret_max, &out_pos, (uint64_t)iter)) return PROXY_EBADARG;
         if (ret_len) *ret_len = out_pos;
         return PROXY_OK;
     }
@@ -203,10 +233,11 @@ static int env_call(struct proxy_slot *s, uint16_t op,
         size_t iter = (size_t)it;
         char nsbuf[ENV_NAME_MAX + 1], namebuf[ENV_NAME_MAX + 1];
         int rc = ops->list_all(&iter, nsbuf, sizeof nsbuf, namebuf, sizeof namebuf);
-        if (rc != ENV_OK) return PROXY_EINTERNAL;
-        if (!put_str(ret, ret_max, &out_pos, nsbuf))         return PROXY_EBADARG;
-        if (!put_str(ret, ret_max, &out_pos, namebuf))       return PROXY_EBADARG;
-        if (!put_u64(ret, ret_max, &out_pos, (uint64_t)iter))return PROXY_EBADARG;
+        if (rc == ENV_NOT_FOUND) return PROXY_ENOENT;
+        if (rc != ENV_OK)        return PROXY_EINTERNAL;
+        if (!put_str(ret, ret_max, &out_pos, nsbuf))          return PROXY_EBADARG;
+        if (!put_str(ret, ret_max, &out_pos, namebuf))        return PROXY_EBADARG;
+        if (!put_u64(ret, ret_max, &out_pos, (uint64_t)iter)) return PROXY_EBADARG;
         if (ret_len) *ret_len = out_pos;
         return PROXY_OK;
     }
@@ -219,10 +250,11 @@ static int env_call(struct proxy_slot *s, uint16_t op,
         size_t iter = (size_t)it;
         char nsbuf[ENV_NAME_MAX + 1], namebuf[ENV_NAME_MAX + 1];
         int rc = ops->list_by_mask(mask, &iter, nsbuf, sizeof nsbuf, namebuf, sizeof namebuf);
-        if (rc != ENV_OK) return PROXY_EINTERNAL;
-        if (!put_str(ret, ret_max, &out_pos, nsbuf))         return PROXY_EBADARG;
-        if (!put_str(ret, ret_max, &out_pos, namebuf))       return PROXY_EBADARG;
-        if (!put_u64(ret, ret_max, &out_pos, (uint64_t)iter))return PROXY_EBADARG;
+        if (rc == ENV_NOT_FOUND) return PROXY_ENOENT;
+        if (rc != ENV_OK)        return PROXY_EINTERNAL;
+        if (!put_str(ret, ret_max, &out_pos, nsbuf))          return PROXY_EBADARG;
+        if (!put_str(ret, ret_max, &out_pos, namebuf))        return PROXY_EBADARG;
+        if (!put_u64(ret, ret_max, &out_pos, (uint64_t)iter)) return PROXY_EBADARG;
         if (ret_len) *ret_len = out_pos;
         return PROXY_OK;
     }
@@ -261,7 +293,10 @@ static int env_call(struct proxy_slot *s, uint16_t op,
     }
 }
 
-/* vfs_call / timer_call: stubs until the ops structs are catalogued. */
+/* vfs_call / timer_call: stubs until the ops structs are catalogued.
+ * vfs_call is currently unreachable from scripts (proxy_bind rejects BUS_CLASS_VFS);
+ * timer_call is unreachable for the same reason.
+ * When those classes are enabled, fill these switches in. */
 
 static int vfs_call(struct proxy_slot *s, uint16_t op,
                     const uint8_t *args, size_t args_len,
@@ -291,9 +326,11 @@ static int proxy_bind(const char *name, uint32_t *handle_out) {
     switch (d->class) {
     case BUS_CLASS_CONSOLE:
     case BUS_CLASS_ENV:
+        break;
+    /* VFS and TIMER are intentionally excluded until their dispatch switches are filled in (see vfs_call / timer_call). */
     case BUS_CLASS_VFS:
     case BUS_CLASS_TIMER:
-        break;
+        return PROXY_EBADCLASS;
     default:
         return PROXY_EBADCLASS;
     }
@@ -313,8 +350,8 @@ static int proxy_bind(const char *name, uint32_t *handle_out) {
 static int proxy_unbind(uint32_t handle) {
     if (handle >= PROXY_MAX) return PROXY_ESTALE;
     if (!g_slots[handle].live) return PROXY_ESTALE;
-    g_slots[handle].live = false;
-    g_slots[handle].dev  = NULL;
+    g_slots[handle].live  = false;
+    g_slots[handle].dev   = NULL;
     g_slots[handle].class = 0;
     return PROXY_OK;
 }
@@ -322,24 +359,34 @@ static int proxy_unbind(uint32_t handle) {
 static int proxy_call(uint32_t handle, uint16_t op,
                       const uint8_t *args, size_t args_len,
                       uint8_t *ret, size_t ret_max, size_t *ret_len) {
+    if (ret_len) *ret_len = 0;
     if (handle >= PROXY_MAX) return PROXY_ESTALE;
     struct proxy_slot *s = &g_slots[handle];
     if (!s->live || s->dev == NULL) return PROXY_ESTALE;
 
-    /* Staleness: the device must still be the one the bus resolves. */
+    /* Staleness: the device must still be the one the bus resolves.
+     * O(n) by name; acceptable at the current ~10 device count.
+     * If the bus grows past ~100 devices, stamp each bus_device with a generation number and cache it in the slot instead. */
     if (bus_find(s->dev->name) != s->dev) {
         s->live = false;
         s->dev  = NULL;
         return PROXY_ESTALE;
     }
 
+    int rc;
     switch (s->class) {
-    case BUS_CLASS_CONSOLE: return console_call(s, op, args, args_len, ret, ret_max, ret_len);
-    case BUS_CLASS_ENV:     return env_call    (s, op, args, args_len, ret, ret_max, ret_len);
-    case BUS_CLASS_VFS:     return vfs_call    (s, op, args, args_len, ret, ret_max, ret_len);
-    case BUS_CLASS_TIMER:   return timer_call  (s, op, args, args_len, ret, ret_max, ret_len);
-    default:                return PROXY_EBADCLASS;
+    case BUS_CLASS_CONSOLE: rc = console_call(s, op, args, args_len, ret, ret_max, ret_len); break;
+    case BUS_CLASS_ENV:     rc = env_call    (s, op, args, args_len, ret, ret_max, ret_len); break;
+    case BUS_CLASS_VFS:     rc = vfs_call    (s, op, args, args_len, ret, ret_max, ret_len); break;
+    case BUS_CLASS_TIMER:   rc = timer_call  (s, op, args, args_len, ret, ret_max, ret_len); break;
+    default:                rc = PROXY_EBADCLASS; break;
     }
+
+    /* Ensure the contract from proxy.h: *ret_len is 0 on any error path,
+     * even if the per-class handler forgot to set it. */
+    if (rc != PROXY_OK && ret_len)
+        *ret_len = 0;
+    return rc;
 }
 
 static const struct proxy_ops g_proxy_ops = {
@@ -370,8 +417,10 @@ int proxy_init(void) {
         .private_data = NULL,
         .owner_id     = BUS_PROXY,
     };
-    if (bus_register(&dev) != 0)
+    if (bus_register(&dev) != 0) {
+        klog_warning("proxy: bus registration failed\n");
         return -1;
+    }
     bus_test("proxy");
     return 0;
 }
