@@ -113,18 +113,19 @@ kernel/
       ├── lib/                        # Interior library
       │   ├── mem.h                   # Direct memory operation library
       │   └── string.h                # String manipulation library
-      ├── linker-scripts/             # build scripts, linkers, offset partitions
+      ├── linker-scripts/             # Build scripts, linkers, offset partitions
       └── ext/                        # Kernel extensions, drivers, and visual assets
           ├── fbcon/                  # Framebuffer Console extension (Flanterm backend)
           ├── proxy/                  # Bus extension module (native safe bus call proxy service)
-          ├── cpu/                    # Query cpuid information
-          ├── system/                 # built-in system commands
-          ├── memory/                 # Heap, memory inspect and testers
+          ├── cpu/                    # Display cpuid information
+          ├── system/                 # Built-in system commands
+          ├── memory/                 # Memory inspection kits
           ├── env/                    # Environment command-line tool
-          ├── envtool/                # Environment inspect and testers
+          ├── envtool/                # Environment inspection tool
 	  ├── explorer/               # Ramfs/vfs browser
           ├── top/                    # System monitor app
           ├── script/                 # VM machine & library (native script/compiler/bytecode service)
+          ├── stresser/               # Stress-testing kits (env)
           └── assets/                 # Static resources & embedded binary payloads
 ```
 
