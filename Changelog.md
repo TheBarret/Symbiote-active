@@ -94,4 +94,5 @@
 - `ext/stresser/stresser.c`, `ext/stresser/stresser.h`: added as stand-alone stress tool.
 - `core/dev/metric.c`, `core/dev/metric.h`: added `timer` endpoints , `task_pending, task_active`.
 
+- `ext/proxy/proxy.c`, `ext/proxy/proxy.h`, `ext/proxy/proxytest.c`: reshaped and patched for better error handling, added proxy tester.
 ---
