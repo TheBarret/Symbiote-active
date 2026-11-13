@@ -9,7 +9,12 @@ This repository (`0.1.*`) is the active development line of the `0.1.0 (alpha)` 
 
 ### Docs
 
-- Changelog: [0.1.2](Changelog.md)  
+- Changelog:
+	- `0.0.1` alpha (archived): GRUB [kernel](https://github.com/TheBarret/Kernel)
+	- `0.1.0` alpha (archived): Limine [Kernel](https://github.com/TheBarret/Symbiote)
+	- `0.1.1` stable (this repo): bus + environment
+	- `0.1.2` stable (this repo): bus + environment + LC3 + Decimals + Proxy [changelog](Changelog.md) 
+
 - [Quick Reference Manual](Reference.md)  
 
 <img width="386" height="233" alt="bootlog" src="https://github.com/user-attachments/assets/a2bf1274-fec1-4518-aa85-ea5b4a5f5e87" />
