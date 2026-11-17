@@ -26,7 +26,21 @@
 #include <core/cmd.h>       // Command-line dispatcher
 #include <core/shell.h>     // Shell Manager (ref: cmd.h)
 
+/* superloop back-end */
+#include <core/superloop.h> // Superloop manager
+static bool tick_timer(void) { timer_drain(); return false; }
+static bool tick_isa(void)   { isa_step();    return false; }
+static bool tick_kbd(void) {
+    char c = 0;
+    enum kbd_event ev = kbd_poll(&c);
+    if (ev == KBD_CHAR) { shell_tick(c); return true; }
+    return false;
+}
+static struct superloop_participant p_timer = { .name = "DRAIN", .tick = tick_timer, .priority = 10, .warm_up_remaining = 2, .struggler = false };
+static struct superloop_participant p_isa = { .name = "ISA", .tick = tick_isa, .priority = 20, .warm_up_remaining = 0, .struggler = true };
+static struct superloop_participant p_kbd = { .name = "SHELL", .tick = tick_kbd, .priority = 30, .warm_up_remaining = 0, .struggler = true };
 
+/* boot->kmain() entrypoint */
 void kmain(void) {
     // Stage 1 ---------------------------------------------------------------------------
     // Limine validation logic or hang forever
@@ -68,21 +82,17 @@ void kmain(void) {
     shell_init();               // init shell dispatcher
     kprintf("\nType 'help' for a list of command.\n");
 
-    /* super loop: drain any scheduled timers */
-    /* poll for keyboard input without blocking */
-    /* sleep until the next interrupt (timer or keyboard) */
-    for (;;) {
-        timer_drain();      // scheduled: timers
-        isa_step();         // scheduled: messages
-        char c = 0;
-        enum kbd_event ev = kbd_poll(&c);
-        if (ev == KBD_CHAR) { // catch up with shell
-            shell_tick(c);
-        }
-        cpu_sti_hlt();       // cpu delays interrupt delivery
-                             // until after the instruction
+    /* superloop back-end */
+    bool superloop_ready = true;
+    superloop_ready = superloop_add(&p_timer);
+    superloop_ready = superloop_add(&p_isa);
+    superloop_ready = superloop_add(&p_kbd);
+    if (superloop_ready) {
+        superloop_prime();         /* prime */
+        superloop_run(cpu_sti_hlt); /* sleep until next interrupt */
+    } else {
+        klog_error("superloop not loaded properly, halting...");
     }
     /* fall-through guarantee */
     cpu_halt_forever();
-
 }
