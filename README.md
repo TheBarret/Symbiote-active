@@ -20,9 +20,8 @@ make run            # boot under QEMU, UEFI path
 make run-serial     # boot headless, serial console to the terminal
 make -C kernel size # report kernel size
 ```
-
-Build with `CPPFLAGS=-DSYM_MEMDEBUG` to enable `heap.c` header magic, poison, and owner tagging.  
-Build with `EXTENSIONS="hello"` (recursive lookup) for a headless image with only the smoke-test extension.  
+> Build with extensions `EXTENSIONS="hello"` (recursive build pattern: `/hello/hello.c`).  
+> Build with header magic, poison, and owner tagging (`CPPFLAGS=-DSYM_MEMDEBUG` to enable `heap.c`).   
 
 **heap.c, header magic, poison, and owner tagging:**  
 ```
