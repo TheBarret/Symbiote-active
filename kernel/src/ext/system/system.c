@@ -131,4 +131,4 @@ SYM_COMMAND(help, "[command:str...]", "List all commands or inspect with help <c
 
 /* extension greeter */
 static int system_ext_init(void) { return 0; }
-SYM_EXTENSION(sys_toolkit, system_ext_init, EXT_PRIO_APPLET);
+SYM_EXTENSION(system, system_ext_init, EXT_PRIO_SERVICE);
