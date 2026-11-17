@@ -69,8 +69,6 @@ static int fbcon_allocate(void) {
     return 0;
 }
 
-static int fbcon_init(void) {
-    return fbcon_allocate();
-}
+static int fbcon_init(void) { return fbcon_allocate(); }
 
 SYM_EXTENSION(flanterm_mintsuki_c99, fbcon_init, EXT_PRIO_CONSOLE);
