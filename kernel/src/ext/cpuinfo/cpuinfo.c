@@ -98,4 +98,4 @@ static int cpu_ext_init(void) {
     return 0;
 }
 
-SYM_EXTENSION(cpu_toolkit, cpu_ext_init, EXT_PRIO_APPLET);
+SYM_EXTENSION(cpuinfo, cpu_ext_init, EXT_PRIO_APPLET);
