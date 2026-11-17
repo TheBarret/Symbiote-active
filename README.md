@@ -64,6 +64,7 @@ kernel/
       │   ├── klog.h                  # Kernel logging extension
       │   ├── ext.h                   # Extension module dispatcher
       │   ├── cmd.h                   # Command-line dispatcher & interpreter
+      │   ├── superloop.h             # Shell-loop manager
       │   └── shell.h                 # Interactive Shell Manager
       ├── lib/                        # Interior library
       │   ├── mem.h                   # Direct memory operation library
@@ -73,8 +74,8 @@ kernel/
           ├── fbcon/                  # Framebuffer Console extension (Flanterm)
           ├── cpuinfo/                # Display cpuid information
           ├── system/                 # Built-in system commands
-          ├── memory/                 # Memory functions and dump toolkit
-          ├── testers/                # Testing suites
+          ├── memory/                 # Memory testing and inspection tools
+          ├── tools/                  # Extra testing tools
           └── assets/                 # Static resources & embedded binary payloads (fonts)
 ```
 
