@@ -34,6 +34,51 @@ make -C kernel size # report kernel size
 #endif
 ```
 
+## Project files
+```
+kernel/
+  └── src/
+      ├── main.c                      # Limine->kmain() entrypoint, initializers
+      ├── core/
+      │   ├── arch/                   # Low-level architecture & hardware abstractions
+      │   │   ├── boot.h              # Limine bootloader, boot validation
+      │   │   ├── cpu.h               # CPU tables, CPUID, & TSC-clock management
+      │   │   ├── serial.h            # COM1 serial driver (115200 baud)
+      │   │   ├── gdt.h               # Global Descriptor Table (Ring0)
+      │   │   ├── idt.h               # Interrupt Descriptor Table (256 vectors)
+      │   │   ├── pic.h               # 8259 PIC driver & virtual wire platform
+      │   │   ├── isr.h               # Interrupt Service Routines
+      │   │   ├── pmm.h               # Physical Memory Manager (frame allocation)
+      │   │   ├── vmm.h               # Virtual Memory Manager (PMM-backed paging)
+      │   │   └── heap.h              # Kernel heap (block headers & HHDM coalescing)
+      │   │
+      │   ├── dev/                    # Subsystem device drivers & abstractions
+      │   │   ├── console.h           # Console device & PS/2 interface
+      │   │   ├── keyboard.h          # Keyboard poller, reader
+      │   │   ├── vfs.h               # Virtual File System (ramfs implementation)
+      │   │   └── timer.h             # Programmable interval clock controller
+      │   │
+      │   ├── version.h               # Master version definition
+      │   ├── config.h                # Master config definition
+      │   ├── isa.h                   # Phase driven peripheral message sequencer
+      │   ├── kprintf.h               # Formatted text output multiplexer
+      │   ├── klog.h                  # Kernel logging extension
+      │   ├── ext.h                   # Extension module dispatcher
+      │   ├── cmd.h                   # Command-line dispatcher & interpreter
+      │   └── shell.h                 # Interactive Shell Manager
+      ├── lib/                        # Interior library
+      │   ├── mem.h                   # Direct memory operation library
+      │   └── string.h                # String manipulation library
+      ├── linker-scripts/             # Build scripts, linkers, offset partitions
+      └── ext/                        # Kernel extensions, drivers, and visual assets
+          ├── fbcon/                  # Framebuffer Console extension (Flanterm)
+          ├── cpuinfo/                # Display cpuid information
+          ├── system/                 # Built-in system commands
+          ├── memory/                 # Memory functions and dump toolkit
+          ├── testers/                # Testing suites
+          └── assets/                 # Static resources & embedded binary payloads (fonts)
+```
+
 ---
 
 # Third Party licenses
