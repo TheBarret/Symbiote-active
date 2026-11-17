@@ -102,6 +102,5 @@ static const struct isa_periph console_periph = {
     .ctx   = NULL,
 };
 
-const struct isa_periph *get_console(void) {
-    return &console_periph;
-}
+/* ISA descriptor */
+const struct isa_periph *get_console(void) { return &console_periph; }
