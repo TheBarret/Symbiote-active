@@ -38,7 +38,7 @@ void ext_init_all(void) {
             int rc = e->init();
             current = NULL;
             if (rc == 0)
-                klog_ext("→ %-40s enabled\n", e->name);
+                klog_ext("[%u] → %-50s enabled\n", e->prio, e->name);
             else
                 klog_error("→ %-40s failed, %d\n", e->name, rc);
         }

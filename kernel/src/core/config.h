@@ -8,7 +8,7 @@
 /* incorrect settings can result in unpredictable behaviors!  */
 
 /* Serial settings
- * Ref: src/core/serial.c
+ * Ref: src/core/serial.h
  */
 #define COM1 0x3F8
 #define SERIAL_TX_HOLD 100000   // spin-up
@@ -37,7 +37,7 @@
 
 /* Timer settings
  * Ref: src/core/timer.h
- * Ref: src/core/timer.c
+ * Ref: src/core/timer.h
  *
  * TIMER_HZ is the requested rate; the PIT divisor is an integer,
  * so the actual rate is PIT_FREQ / (PIT_FREQ / TIMER_HZ),
@@ -51,12 +51,12 @@
 
 
 /* Shell settings
- * Ref: src/core/shell.c
+ * Ref: src/core/shell.h
  */
 #define SHELL_LINE_MAX  128
 
 /* Console settings
- * Ref: src/core/console.c
+ * Ref: src/core/console.h
  */
 #define CONSOLE_MAX 4
 #define LOG_SIZE    16384   /* 16kb, log kept in RAM for late-attaching consoles */
@@ -77,15 +77,38 @@
 #define SYM_TAG_ERROR   "\x1b[1;31;7m[ERROR]\x1b[0m"
 
 /* fbcon settings
- * Ref: src/ext/fbcon/fbcon.c
+ * Ref: src/ext/fbcon/fbcon.h
  */
 #define SYM_FBCON_BG UINT32_C(0x000a0a0a)
 #define SYM_FBCON_FG UINT32_C(0x0033ff66)
 
 /* Command dispatcher settings
- * Ref: src/core/cmd.c
+ * Ref: src/core/cmd.h
  */
 #define TOK_MAX 24      /* longest single parameter, e.g. "[iterations:num]" */
+
+
+/* ISA settings
+ * Ref: src/core/isa.h
+ * Phase = timer_ticks() % ISA_PHASE_TICKS,
+ * change with care: this is the ISA's clock divider.
+ */
+#define ISA_PHASE_TICKS 3u /* Ticks per bus cycle. */
+#define ISA_QUEUE_CAP 8u /* Fixed-capacity transaction queue, ISA reads one per cycle. */
+
+
+/* Superloop settings
+ * Ref: src/core/superloop.h
+ */
+#define SL_MAX_PARTICIPANTS 16u
+/* Watchdog threshold in ticks.
+ * A participant whose tick spans >= SL_WARN_TICKS timer ticks is "slow."
+ * At 1000 Hz, SL_WARN_TICKS = 1 means:
+ * any participant that spans a tick boundary is slow.
+ * Increase if legitimate work routinely spans ticks and you don't want to be warned about it.
+ */
+#define SL_WARN_TICKS 1u
+
 
 /* fail at build */
 

@@ -2,6 +2,7 @@
 #ifndef CORE_ISA_H
 #define CORE_ISA_H
 
+#include <core/version.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -10,21 +11,15 @@
 
 /* Classical 8-bit isa
  *
- * A tick-driven phase sequencer. Each bus cycle spans ISA_PHASE_TICKS ticks;
- * timer_ticks() % ISA_PHASE_TICKS selects the active phase.
+ * A tick-driven phase sequencer.
+ * Each bus cycle spans ISA_PHASE_TICKS ticks; timer_ticks() % ISA_PHASE_TICKS selects the active phase.
  * Peripherals are participants: they respond to phases, one cycle at a time.
  * Super-loop contract: isa_step() is called once per main-loop iteration,
  * in thread context, one phase transition per call (No ISR involvement; no blocking).
  */
 
 /* Timing */
-
-/* Ticks per bus cycle. phase = timer_ticks() % ISA_PHASE_TICKS.
- * Change with care: this is the ISA's clock divider. */
-#define ISA_PHASE_TICKS 3u
-
-/* Fixed-capacity transaction queue. Clients push; the ISA pops one per cycle. */
-#define ISA_QUEUE_CAP 8u
+// Moved to config.h
 
 /* Transaction */
 

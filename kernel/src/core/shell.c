@@ -109,7 +109,7 @@ void shell_tick(char c) {
     console_putc(c);
 }
 
-/*  legacy blocking loop  */
+/*  legacy code: blocking loop  */
 
 void shell_run(void) {
     int problems = cmd_selfcheck();
