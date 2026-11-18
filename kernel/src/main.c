@@ -15,7 +15,7 @@
 #include <core/arch/heap.h>         // Block headers, Immediate coalescing, pmm_alloc_contig via HHDM
 /* kernel devices */
 #include <core/dev/keyboard.h>   // Keyboard device
-#include <core/dev/console.h>   // Console device, ps/2
+#include <core/dev/console.h>   // Console device, ps/2 (isa)
 #include <core/dev/vfs.h>       // Virtual File System, ramfs
 #include <core/dev/timer.h>     // Clock controller
 #include <core/isa.h>       // isa bus
@@ -26,19 +26,40 @@
 #include <core/cmd.h>       // Command-line dispatcher
 #include <core/shell.h>     // Shell Manager (ref: cmd.h)
 
-/* superloop back-end */
-#include <core/superloop.h> // Superloop manager
-static bool tick_timer(void) { timer_drain(); return false; }
-static bool tick_isa(void)   { isa_step();    return false; }
-static bool tick_kbd(void) {
-    char c = 0;
-    enum kbd_event ev = kbd_poll(&c);
-    if (ev == KBD_CHAR) { shell_tick(c); return true; }
-    return false;
+/* Loop.h back-end */
+#include <core/loop.h>
+static uint32_t run_drain(void *ctx, uint32_t budget) {
+    (void)ctx; (void)budget;
+    timer_drain();
+    return 0;
 }
-static struct superloop_participant p_timer = { .name = "DRAIN", .tick = tick_timer, .priority = 10, .warm_up_remaining = 2, .struggler = false };
-static struct superloop_participant p_isa = { .name = "ISA", .tick = tick_isa, .priority = 20, .warm_up_remaining = 0, .struggler = true };
-static struct superloop_participant p_kbd = { .name = "SHELL", .tick = tick_kbd, .priority = 30, .warm_up_remaining = 0, .struggler = true };
+static uint32_t run_input(void *ctx, uint32_t budget) {
+    (void)ctx;
+    uint32_t n = 0;
+    char c = 0;
+    while (n < budget && kbd_poll(&c) == KBD_CHAR) {
+        shell_tick(c);
+        n++;
+    }
+    return n;
+}
+static uint32_t run_isa(void *ctx, uint32_t budget) {
+    (void)ctx; (void)budget;
+    isa_step();
+    return 0;
+}
+
+static struct task g_tasks[] = {
+    { .name = "DRAIN", .run = run_drain, .budget = 1,  .period = 1 },
+    { .name = "INPUT", .run = run_input, .budget = 10, .period = 1 },
+    { .name = "ISA",   .run = run_isa,   .budget = 10, .period = 1 },
+};
+
+static bool machine_can_run(void) {
+    for (size_t i = 0; i < sizeof g_tasks / sizeof g_tasks[0]; i++)
+        if (!loop_add(&g_tasks[i])) return false;
+    return true;
+}
 
 /* boot->kmain() entrypoint */
 void kmain(void) {
@@ -60,16 +81,17 @@ void kmain(void) {
     cpu_sti();                  // interrupts
     isa_init();                 // isa
     if (!isa_attach(get_console())) { // need console
-        klog_error("Error: console sink failed, halting...\n");
+        klog_error("console sink failed, halting...\n");
         cpu_halt_forever();     // no console. halt.
     }
     serial_init();              // serial sink
     // Stage 2 ---------------------------------------------------------------------------
     if (!kbd_init()) {          // need keyboard
-        klog_error("Error: no PS/2 keyboard detected!\n");
+        klog_error("no PS/2 keyboard detected, halting...\n");
         cpu_halt_forever();     // no keyboard, halt.
     }
-    vfs_init();                 // filesystem
+    vfs_init();                 // filesystem storage
+
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
     /* stage two: extensions */
@@ -82,17 +104,9 @@ void kmain(void) {
     shell_init();               // init shell dispatcher
     kprintf("\nType 'help' for a list of command.\n");
 
-    /* superloop back-end */
-    bool superloop_ready = true;
-    superloop_ready = superloop_add(&p_timer);
-    superloop_ready = superloop_add(&p_isa);
-    superloop_ready = superloop_add(&p_kbd);
-    if (superloop_ready) {
-        superloop_prime();         /* prime */
-        superloop_run(cpu_sti_hlt); /* sleep until next interrupt */
-    } else {
-        klog_error("superloop not loaded properly, halting...");
-    }
-    /* fall-through guarantee */
-    cpu_halt_forever();
+    if (!machine_can_run()) {
+            klog_error("task registration failed, halting...\n");
+            cpu_halt_forever();
+        }
+    loop_run(cpu_sti_hlt);      /* noreturn */
 }
