@@ -24,13 +24,6 @@ typedef struct {
 // callback signature
 typedef void (*network_rx_callback_t)(network_pframe *pkt);
 
-// phase identifiers
-enum network_phases {
-    NET_PHASE_POLL   = 0,   // on input, flush TX buffers
-    NET_PHASE_ROUTE  = 1,   // routing, delivery
-    NET_PHASE_SYNC   = 2,   // cleanup, post-dispatch sync
-};
-
 typedef struct network_device {
     const char *name;                // human-readable string name
     uint32_t   id;                   // Unique address
@@ -45,6 +38,5 @@ typedef struct network_device {
 void router_init(void);
 bool router_register_device(const char *name, uint32_t id, uint64_t address_base, size_t buffer_length, network_rx_callback_t handler);
 bool router_send_packet(network_pframe *pkt);
-void router_cycle();
 
 #endif

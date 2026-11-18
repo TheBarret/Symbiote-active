@@ -45,7 +45,7 @@ void rnd_init(uint16_t seed) {
     memset(g_ring, 0, sizeof g_ring);
     g_head  = 0;
     g_count = 0;
-    klog("• RANDOM   [OK] seed=0x%04x, ring=%u\n", seed, RND_RING_SIZE);
+    klog_serv("Randomizer: type=xorshift16, seed=0x%04x, ring=%u\n", seed, RND_RING_SIZE);
 }
 
 uint16_t rnd_next(void) {

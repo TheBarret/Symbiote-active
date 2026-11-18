@@ -5,11 +5,9 @@
 
 static network_device_t *device_head = NULL;
 
-uint32_t current_phase = NET_PHASE_POLL;
-
 void router_init(void) {
     device_head = NULL;
-    klog("• ROUTER   [OK] Miniature Datagram Network\n");
+    klog_serv("Router: in-memory message broker\n");
 }
 
 bool router_register_device(const char *name, uint32_t id, uint64_t address_base, size_t buffer_length, network_rx_callback_t handler) {
@@ -41,7 +39,7 @@ bool router_register_device(const char *name, uint32_t id, uint64_t address_base
     dev->next = device_head;
     device_head = dev;
 
-    klog("Registering device '%s' address=0x%x, base=0x%lx, length=%zu\n",
+    klog_serv("Routing '%s' on address=0x%x, base=0x%lx, length=%zu\n",
          name, id, address_base, buffer_length);
     return true;
 }
@@ -74,28 +72,4 @@ bool router_send_packet(network_pframe *pkt) {
     // Fire-and-forget: clean up packet memory after delivery
     kfree(pkt);
     return true;
-}
-
-// The 3-Phase Timer Cycle Hook
-void router_cycle() {
-    uint32_t phase = current_phase;
-    switch (phase) {
-        case NET_PHASE_POLL:
-            // phase 0: Devices check internal state, input lines, or pending TX
-            current_phase = NET_PHASE_ROUTE;
-            break;
-
-        case NET_PHASE_ROUTE:
-            // phase 1: Switchboard routing tier (if using a central queue buffer)
-            current_phase = NET_PHASE_SYNC;
-            break;
-
-        case NET_PHASE_SYNC:
-            // phase 2: Post-dispatch cleanup and status flags reset
-            current_phase = NET_PHASE_POLL;
-            break;
-
-        default:
-            break;
-    }
 }
