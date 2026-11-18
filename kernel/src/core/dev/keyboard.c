@@ -170,7 +170,7 @@ static void update_leds(void) {
 }
 
 bool kbd_init(void) {
-    klog("→ keyboard_init()\n");
+    klog("• KEYBOARD [OK]\n");
     drain();
     if (!write_command(CMD_DISABLE_KBD))
         return false;

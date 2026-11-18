@@ -37,7 +37,7 @@ int console_register(const struct console_sink *sink) {
     }
     sink->write(log_buf, log_head);
 
-    klog("→ sink added, length=%lu\n", console_count);
+    //klog("→ sink added, length=%lu\n", console_count);
     return CONSOLE_OK;
 }
 

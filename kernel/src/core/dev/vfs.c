@@ -560,6 +560,6 @@ void vfs_init(void) {
     root = node_new(VFS_DIR, "", 0);
     if (!root)
         PANIC("vfs init: cannot allocate root");
-    klog("→ vfs_init() root mounted\n");
+    klog("• VFS      [OK]\n");
 
 }

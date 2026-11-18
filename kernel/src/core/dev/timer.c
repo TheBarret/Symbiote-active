@@ -278,6 +278,6 @@ void timer_init(uint32_t hz) {
     if (irq_register(0, timer_irq, NULL) != 0)
         PANIC("timer: IRQ0 already taken");
     inited = true;
-    klog("→ timer_init() freq_hz=%u, irq=0, channel=0, mode=2\n", hz);
+    klog("• TIMER    [OK] freq_hz=%u, irq=0, channel=0, mode=2\n", hz);
 
 }
