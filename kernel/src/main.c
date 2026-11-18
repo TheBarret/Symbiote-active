@@ -15,16 +15,18 @@
 #include <core/arch/heap.h>         // Block headers, Immediate coalescing, pmm_alloc_contig via HHDM
 /* kernel devices */
 #include <core/dev/keyboard.h>   // Keyboard device
-#include <core/dev/console.h>   // Console device, ps/2 (isa)
+#include <core/dev/console.h>   // Console device, ps/2
 #include <core/dev/vfs.h>       // Virtual File System, ramfs
 #include <core/dev/timer.h>     // Clock controller
-#include <core/isa.h>       // isa bus
+/* kernel services */
+#include <core/services/random.h>   // randomizer, seed based xorshift16
 /* kernel modules */
 #include <core/kprintf.h>   // Formatted output to every console
 #include <core/klog.h>      // Kernel logger extension (kern, info, warn, error)
 #include <core/ext.h>       // Extension-module dispatcher
 #include <core/cmd.h>       // Command-line dispatcher
 #include <core/shell.h>     // Shell Manager (ref: cmd.h)
+
 
 /* Loop.h back-end */
 #include <core/loop.h>
@@ -43,16 +45,9 @@ static uint32_t run_input(void *ctx, uint32_t budget) {
     }
     return n;
 }
-static uint32_t run_isa(void *ctx, uint32_t budget) {
-    (void)ctx; (void)budget;
-    isa_step();
-    return 0;
-}
-
 static struct task g_tasks[] = {
     { .name = "DRAIN", .run = run_drain, .budget = 1,  .period = 1 },
     { .name = "INPUT", .run = run_input, .budget = 10, .period = 1 },
-    { .name = "ISA",   .run = run_isa,   .budget = 10, .period = 1 },
 };
 
 static bool machine_can_run(void) {
@@ -79,11 +74,7 @@ void kmain(void) {
     pic_init();                 // interrupts
     timer_init(TIMER_HZ);       // interrupts
     cpu_sti();                  // interrupts
-    isa_init();                 // isa
-    if (!isa_attach(get_console())) { // need console
-        klog_error("console sink failed, halting...\n");
-        cpu_halt_forever();     // no console. halt.
-    }
+    rnd_init(RND_SEED);         // service
     serial_init();              // serial sink
     // Stage 2 ---------------------------------------------------------------------------
     if (!kbd_init()) {          // need keyboard
@@ -91,7 +82,6 @@ void kmain(void) {
         cpu_halt_forever();     // no keyboard, halt.
     }
     vfs_init();                 // filesystem storage
-
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
     /* stage two: extensions */
