@@ -1,5 +1,5 @@
-#ifndef CORE_LOOP_H
-#define CORE_LOOP_H
+#ifndef CORE_SERVICES_LOOP_H
+#define CORE_SERVICES_LOOP_H
 
 #include <stdbool.h>
 #include <stddef.h>
