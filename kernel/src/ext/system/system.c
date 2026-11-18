@@ -22,7 +22,7 @@
 
 static int cmd_version_fn(const struct cmd_args *a) {
     (void)a;
-    kprintf("Symbiote %s\n", SYM_VERSION);
+    kprintf("%s %s-%s\n",SYM_BOOTNAME, SYM_VERSION, SYM_VERSION_INFO);
     return CMD_OK;
 }
 
