@@ -11,12 +11,16 @@
 static struct superloop_participant *g_parts[SL_MAX_PARTICIPANTS];
 static uint32_t g_part_count;
 
+/* metrics variables */
 static uint64_t g_iterations;
 static uint64_t g_idle_iterations;
 static uint64_t g_halts;
 
-/* Insertion sort by priority: table stays ordered so the loop is a plain
- * sequential walk. n <= SL_MAX_PARTICIPANTS, so this is trivially cheap. */
+/* Insert
+ * Sort by priority:
+ * - table stays ordered so the loop is a plain sequential walk.
+ * - n <= SL_MAX_PARTICIPANTS, so this is trivially cheap.
+ */
 static void sort_by_priority(void) {
     for (uint32_t i = 1; i < g_part_count; i++) {
         struct superloop_participant *p = g_parts[i];
