@@ -97,16 +97,6 @@
 #define ISA_QUEUE_CAP 8u /* Fixed-capacity transaction queue, ISA reads one per cycle. */
 
 
-/* Superloop settings
- * Ref: src/core/superloop.h
- */
-#define SL_MAX_PARTICIPANTS 16u
-/* tick spans >= SL_WARN_TICKS timer ticks is slow at 1000Hz, SL_WARN_TICKS = 1 means:
- * any participant that spans a tick boundary is slow.
- * Increase if legitimate work routinely spans ticks and you don't want to be warned about it. */
-#define SL_WARN_TICKS 1u
-
-
 /* fail at build */
 
 _Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "config.h: PMM_PAGE_SIZE must be a power of two");
