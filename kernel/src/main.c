@@ -19,7 +19,10 @@
 #include <core/dev/vfs.h>       // Virtual File System, ramfs
 #include <core/dev/timer.h>     // Clock controller
 /* kernel services */
+#include <core/services/loop.h> // shell loop manager
 #include <core/services/random.h>   // randomizer, seed based xorshift16
+#include <core/services/router.h>   // miniature datagram network
+#include <core/services/echo.h>   // network echo test
 /* kernel modules */
 #include <core/kprintf.h>   // Formatted output to every console
 #include <core/klog.h>      // Kernel logger extension (kern, info, warn, error)
@@ -29,7 +32,7 @@
 
 
 /* Loop.h back-end */
-#include <core/loop.h>
+
 static uint32_t run_drain(void *ctx, uint32_t budget) {
     (void)ctx; (void)budget;
     timer_drain();
@@ -45,9 +48,15 @@ static uint32_t run_input(void *ctx, uint32_t budget) {
     }
     return n;
 }
+static uint32_t run_router(void *ctx, uint32_t budget) {
+    (void)ctx; (void)budget;
+    router_cycle();
+    return 0;
+}
 static struct task g_tasks[] = {
     { .name = "DRAIN", .run = run_drain, .budget = 1,  .period = 1 },
-    { .name = "INPUT", .run = run_input, .budget = 10, .period = 1 },
+    { .name = "INPUT", .run = run_input, .budget = 2, .period = 1 },
+    { .name = "ROUTER", .run = run_router, .budget = 5, .period = 5 },
 };
 
 static bool machine_can_run(void) {
@@ -74,7 +83,9 @@ void kmain(void) {
     pic_init();                 // interrupts
     timer_init(TIMER_HZ);       // interrupts
     cpu_sti();                  // interrupts
-    rnd_init(RND_SEED);         // service
+    rnd_init(RND_SEED);         // random service
+    router_init();              // router service
+    run_echo();
     serial_init();              // serial sink
     // Stage 2 ---------------------------------------------------------------------------
     if (!kbd_init()) {          // need keyboard
