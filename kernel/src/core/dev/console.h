@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <core/isa.h>
 
 /* codebase: 0.2.0 */
 
@@ -20,9 +19,9 @@ struct console_sink {
 
 /* Return status codes for console registration operations. */
 enum console_status {
-    CONSOLE_OK    = 0, /* Sink attached successfully, boot log replayed */
-    CONSOLE_FULL  = 1, /* Attachment failed: sink capacity exceeded */
-    CONSOLE_INVAL = 2, /* Attachment failed: invalid or NULL sink pointer */
+    CONSOLE_OK      = 0, /* Sink attached successfully, boot log replayed */
+    CONSOLE_FULL    = 1, /* Attachment failed: sink capacity exceeded */
+    CONSOLE_INVALID = 2, /* Attachment failed: invalid or NULL sink pointer */
 };
 
 /*
