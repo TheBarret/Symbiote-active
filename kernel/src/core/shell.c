@@ -49,7 +49,7 @@ static void run_line(char *line) {
     char *argv[SHELL_ARG_MAX + 1];
     int argc = tokenize(line, argv, SHELL_ARG_MAX);
     if (argc < 0) {
-        kprintf("Too many words (max=%d including the command name)\n", SHELL_ARG_MAX);
+        kprintf("Too many arguments (max=%d, command included)\n", SHELL_ARG_MAX);
         return;
     }
     if (argc == 0)
@@ -116,7 +116,7 @@ void shell_run(void) {
     if (problems) {
         kprintf("[Warning] %d issues detected in look-up table.\n", problems);
     }
-    kprintf("\nType 'help' for a list of commands, ready when you are!\n");
+    kprintf("\nType 'help' for a list of commands.\n");
 
     shell_init();
 

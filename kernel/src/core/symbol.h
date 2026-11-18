@@ -68,8 +68,7 @@ enum symbol_type {
 
 /* Mask Builder
  * Extensions MUST build masks with symbol_mask_build */
-static inline uint32_t symbol_mask_build(uint8_t owner, uint8_t type,
-                                         uint32_t flags, uint16_t priv) {
+static inline uint32_t symbol_mask_build(uint8_t owner, uint8_t type, uint32_t flags, uint16_t priv) {
     return ((uint32_t)(owner & 0xFFu) << SYMBOL_OWNER_SHIFT) |
            ((uint32_t)(type  & 0x0Fu) << SYMBOL_TYPE_SHIFT)  |
            (flags & SYMBOL_FLAG_MASK) |
@@ -77,10 +76,8 @@ static inline uint32_t symbol_mask_build(uint8_t owner, uint8_t type,
 }
 static inline uint8_t  symbol_mask_owner(uint32_t m) { return (uint8_t)((m & SYMBOL_OWNER_MASK) >> SYMBOL_OWNER_SHIFT); }
 static inline uint8_t  symbol_mask_type (uint32_t m) { return (uint8_t)((m & SYMBOL_TYPE_MASK)  >> SYMBOL_TYPE_SHIFT);  }
-
 /* shifted to 0..3 */
 static inline uint8_t  symbol_mask_flags(uint32_t m) { return (uint8_t)((m & SYMBOL_FLAG_MASK)  >> SYMBOL_FLAG_SHIFT);  }
-
 static inline uint16_t symbol_mask_priv (uint32_t m) { return (uint16_t)((m & SYMBOL_PRIV_MASK)  >> SYMBOL_PRIV_SHIFT);  }
 static inline bool symbol_mask_has(uint32_t m, uint32_t flag) { return (m & flag) == flag; }
 
@@ -165,16 +162,14 @@ void symbol_destroy(void);
  * WRITE-ONCE for SYM_FLAG_READONLY entries: first set may proceed,
  * later overwrite returns SYM_READONLY (unset still allowed).
  */
-int symbol_set(const char *ns, const char *name,
-               const void *value, size_t len, uint32_t mask);
+int symbol_set(const char *ns, const char *name, const void *value, size_t len, uint32_t mask);
 
 /* Read a typed value into a caller buffer.
  * Copies exactly value_len bytes; no implicit NUL is appended.
  * A STRING value includes its own NUL (set required it), so it is self-terminating.
  * On SYM_BUFFER_TOO_SMALL, *len_out holds the needed length.
  */
-int symbol_get(const char *ns, const char *name,
-               void *buf, size_t buf_max, size_t *len_out);
+int symbol_get(const char *ns, const char *name, void *buf, size_t buf_max, size_t *len_out);
 
 /* (Nuclear) Remove: returns its arena range to the pool.
  * Not gated by flags (READONLY/SYSTEM), no caller tracing.
