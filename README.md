@@ -2,7 +2,8 @@
 
 Simbiote, tiny hobby kernel made in C-lang, bootable x86-64.  
 
-<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/0b2556f1-c5da-481d-9d58-63ed77058eb4" />  
+<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/e188f91e-c98e-4e19-bb81-7785fe733701" />  
+
 
 ## Building
 
