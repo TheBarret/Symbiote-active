@@ -134,7 +134,7 @@ void isa_init(void) {
     }
     memset(&g_isa, 0, sizeof g_isa);
     g_isa_initialized = true;
-    klog("→ isa_init() queue=%u, phase_ticks=%u\n", ISA_QUEUE_CAP, ISA_PHASE_TICKS);
+    klog("• ISA      [OK] queue=%u, phase_ticks=%u\n", ISA_QUEUE_CAP, ISA_PHASE_TICKS);
 }
 
 void isa_destroy(void) {
