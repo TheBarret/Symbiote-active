@@ -20,9 +20,9 @@
 #include <core/dev/timer.h>     // Clock controller
 /* kernel services */
 #include <core/services/loop.h> // shell loop manager
+#include <core/services/symbol.h> // symbol storage
 #include <core/services/random.h>   // randomizer, seed based xorshift16
 #include <core/services/router.h>   // miniature datagram network
-#include <core/services/echo.h>   // network echo test
 /* kernel modules */
 #include <core/kprintf.h>   // Formatted output to every console
 #include <core/klog.h>      // Kernel logger extension (kern, info, warn, error)
@@ -48,17 +48,11 @@ static uint32_t run_input(void *ctx, uint32_t budget) {
     }
     return n;
 }
-static uint32_t run_router(void *ctx, uint32_t budget) {
-    (void)ctx; (void)budget;
-    router_cycle();
-    return 0;
-}
+
 static struct task g_tasks[] = {
     { .name = "DRAIN", .run = run_drain, .budget = 1,  .period = 1 },
     { .name = "INPUT", .run = run_input, .budget = 2, .period = 1 },
-    { .name = "ROUTER", .run = run_router, .budget = 5, .period = 1 },
 };
-
 
 static bool machine_can_run(void) {
     for (size_t i = 0; i < sizeof g_tasks / sizeof g_tasks[0]; i++)
@@ -74,7 +68,7 @@ void kmain(void) {
     /* essentials */
     klog_init();                // kernel format logger
     /* greeter */
-    klog_info("Loading kernel: Symbiote %s-%s...\n", SYM_VERSION, SYM_VERSION_INFO);
+    klog_info("Loading kernel: %s %s-%s...\n", SYM_BOOTNAME, SYM_VERSION, SYM_VERSION_INFO);
     /* kernel modules start */
     gdt_init();                 // CPU tables (no heap required)
     idt_init();
@@ -84,9 +78,6 @@ void kmain(void) {
     pic_init();                 // interrupts
     timer_init(TIMER_HZ);       // interrupts
     cpu_sti();                  // interrupts
-    rnd_init(RND_SEED);         // random service
-    router_init();              // router service
-    run_echo();
     serial_init();              // serial sink
     // Stage 2 ---------------------------------------------------------------------------
     if (!kbd_init()) {          // need keyboard
@@ -94,12 +85,15 @@ void kmain(void) {
         cpu_halt_forever();     // no keyboard, halt.
     }
     vfs_init();                 // filesystem storage
+    /* services */
+    rnd_init(RND_SEED);         // randomizer
+    router_init();              // virtual bus
+    symbol_init();              // symbol storage
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
     /* stage two: extensions */
     ext_init_all();             // extensions
     cmd_selfcheck();            /* commence self-test after ext-registration */
-
     // Stage 3 ---------------------------------------------------------------------------
     /* greeter */
     klog_info("Stage 2 complete (ext: %zu, sys: %zu)\n", ext_count(), cmd_count());
