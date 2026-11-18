@@ -4,6 +4,13 @@
 
 <img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/e188f91e-c98e-4e19-bb81-7785fe733701" />  
 
+### Acknowledgement
+
+This is a hobby project, the `core/` is stable, providing the basics and extension to experiment with.  
+**Symbiote OS** was developed with assistance from Claude (Anthropic), DeepSeek, and CursorAI,  
+used for architectural review, code generation, and audit passes, all code is reviewed and owned by the maintainer; the tools are collaborators, not authors.  
+
+> for more details or assistance using it, do please contact me on [**Discord**](https://discord.gg/bhDQwUxNn9).  
 
 ## Building
 
