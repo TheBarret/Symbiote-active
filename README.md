@@ -1,6 +1,6 @@
 # Symbiote-active
 
-Simbiote, tiny hobby kernel made in C-lang, bootable x86-64.  
+**Symbiote OS**, a tiny hobby kernel made in C-lang, agnostic bootable x86-64 using the Limine bootloader.  
 
 <img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/e188f91e-c98e-4e19-bb81-7785fe733701" />  
 
