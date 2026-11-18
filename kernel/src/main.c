@@ -56,8 +56,9 @@ static uint32_t run_router(void *ctx, uint32_t budget) {
 static struct task g_tasks[] = {
     { .name = "DRAIN", .run = run_drain, .budget = 1,  .period = 1 },
     { .name = "INPUT", .run = run_input, .budget = 2, .period = 1 },
-    { .name = "ROUTER", .run = run_router, .budget = 5, .period = 5 },
+    { .name = "ROUTER", .run = run_router, .budget = 5, .period = 1 },
 };
+
 
 static bool machine_can_run(void) {
     for (size_t i = 0; i < sizeof g_tasks / sizeof g_tasks[0]; i++)
