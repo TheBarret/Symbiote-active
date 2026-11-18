@@ -25,12 +25,14 @@ int cmd_loopstat_fn(const struct cmd_args *a) {
     kprintf("  Halts        : %llu\n", (unsigned long long)sl.halts);
 
     kprintf("Clock\n");
-    kprintf("  HZ           : %u\n", timer_hz());
-    kprintf("  Ticks        : %llu\n", (unsigned long long)timer_ticks());
-    kprintf("  Uptime       : %llu ms\n", (unsigned long long)uptime_ms());
+    kprintf("  HZ           : %u (PIT=%llu)\n", timer_hz(), PIT_FREQ);
+    kprintf("  Ticks        : %llu\n",
+                            (unsigned long long)timer_ticks());
+    kprintf("  Uptime       : %llu ms\n",
+                            (unsigned long long)uptime_ms());
     kprintf("  Tasks        : %llu active, %llu pending\n",
-            (unsigned long long)timer_tasks_active(),
-            (unsigned long long)timer_tasks_pending());
+                            (unsigned long long)timer_tasks_active(),
+                            (unsigned long long)timer_tasks_pending());
 
     kprintf("Roster (%u active)\n", sl.participants);
     kprintf("  name        calls        ticks        max  budget  status\n");
