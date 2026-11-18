@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <core/arch/cpu.h>
 #include <core/dev/timer.h>
-#include <core/loop.h>
+#include <core/services/loop.h>
 
 static struct task *g_tasks[LOOP_MAX_TASKS];
 static uint32_t     g_count;
