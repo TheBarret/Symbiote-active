@@ -52,7 +52,7 @@ kernel/
       │   │   └── heap.h              # Kernel heap (block headers & HHDM coalescing)
       │   │
       │   ├── dev/                    # Subsystem device drivers & abstractions
-      │   │   ├── console.h           # Console device & PS/2 interface
+      │   │   ├── console.h           # Console device & PS/2 interface, ISA coupled
       │   │   ├── keyboard.h          # Keyboard poller, reader
       │   │   ├── vfs.h               # Virtual File System (ramfs implementation)
       │   │   └── timer.h             # Programmable interval clock controller
@@ -64,7 +64,8 @@ kernel/
       │   ├── klog.h                  # Kernel logging extension
       │   ├── ext.h                   # Extension module dispatcher
       │   ├── cmd.h                   # Command-line dispatcher & interpreter
-      │   ├── superloop.h             # Shell-loop manager
+      │   ├── symbol.h                # strong-typed variable storage, ISA coupled
+      │   ├── loop.h                  # Shell-loop manager
       │   └── shell.h                 # Interactive Shell Manager
       ├── lib/                        # Interior library
       │   ├── mem.h                   # Direct memory operation library
