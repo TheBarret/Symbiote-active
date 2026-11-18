@@ -173,7 +173,7 @@ void pmm_init(void) {
 
     alloc_cursor = 0;
 
-    klog("→ pmm_init() allocated %zu frames total, of which %zu are free (%zu MiB)\n",
+    klog("• PMM      [OK] allocated %zu frames total, of which %zu are free (%zu MiB)\n",
             total_frames, free_frames,
             (free_frames * PMM_PAGE_SIZE) / (1024 * 1024));
 }

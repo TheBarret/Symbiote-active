@@ -172,7 +172,7 @@ void vmm_init(void) {
 
     nx_ok = efer_nxe_enabled();
     if (!nx_ok)
-        klog_warning("VMM: EFER.NXE clear; NX flag will be ignored\n");
+        klog_warning("vmm: EFER.NXE clear; NX flag will be ignored\n");
 
     uint64_t old_cr3 = read_cr3() & PTE_ADDR_MASK;
     root_phys = clone_level(old_cr3, 4);
@@ -182,7 +182,7 @@ void vmm_init(void) {
 
     apply_kernel_wx();
 
-    klog("→ vmm_init() root=%p, nx=%d, kernel=%p..%p\n",
+    klog("• VMM      [OK] root=%p, nx=%d, kernel=%p..%p\n",
             (void *)root_phys, nx_ok ? 1 : 0,
             (void *)__kernel_start, (void *)__kernel_end);
 

@@ -114,7 +114,7 @@ void heap_init(void) {
         PANIC("heap: cannot allocate initial chunk");
 
     struct heap_stats s = heap_get_stats();
-    klog("→ heap_init() chunk=%u KiB, chunks=%zu, free=%u KiB\n",
+    klog("• HEAP     [OK] chunk=%u KiB, chunks=%zu, free=%u KiB\n",
             (unsigned)(HEAP_CHUNK_SIZE / 1024),
             s.chunks, (unsigned)(s.bytes_free / 1024));
 }

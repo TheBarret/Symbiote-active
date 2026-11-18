@@ -2,6 +2,7 @@
 #include <core/arch/cpu.h>
 #include <core/arch/gdt.h>
 #include <core/arch/idt.h>
+#include <core/klog.h>
 
 // codebase: 0.1.2
 
@@ -47,4 +48,5 @@ void idt_init(void) {
 
     struct dt_ptr ptr = { .limit = sizeof(idt) - 1, .base = (uint64_t)idt };
     cpu_lidt(&ptr);
+    klog("• IDT      [OK]\n");
 }

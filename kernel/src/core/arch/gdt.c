@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <core/arch/cpu.h>
 #include <core/arch/gdt.h>
+#include <core/klog.h>
 
 // codebase: 0.1.2
 
@@ -80,4 +81,5 @@ void gdt_init(void) {
     cpu_lgdt(&ptr);
     reload_segments();
     cpu_ltr(GDT_TSS);
+    klog("• GDT      [OK]\n");
 }

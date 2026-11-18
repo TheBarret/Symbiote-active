@@ -46,9 +46,6 @@ static const struct console_sink serial_sink = {
 };
 
 bool serial_init(void) {
-    klog("→ serial_init() thr=%u, ier=%u, fcr=%u, lcr=%u, mcr=%u, lsr=%u, lsr_thr=%u\n",
-        UART_THR,UART_IER,UART_FCR,UART_LCR,UART_MCR, UART_LSR, UART_LSR_THRE);
-
     outb(COM1 + UART_IER, 0x00); /* Disable all UART interrupts */
     outb(COM1 + UART_LCR, 0x80); /* Enable DLAB to configure baud divisor */
     outb(COM1 + 0,        0x01); /* Divisor low byte: 115200 baud (115200 / 1) */
@@ -61,6 +58,6 @@ bool serial_init(void) {
         klog_error("Error: failed to register console sink\n");
         return false;
     }
-
+    klog("• SERIAL   [OK]\n");
     return true;
 }

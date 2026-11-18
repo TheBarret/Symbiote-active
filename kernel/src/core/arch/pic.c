@@ -41,18 +41,17 @@ static void lapic_virtual_wire(void) {
     uint64_t phys = (((uint64_t)hi << 32) | lo) & 0x000ffffffffff000ull;
     if (!vmm_map(LAPIC_VA, phys, VMM_WRITE | VMM_NX | VMM_NOCACHE)) {
         /* If the map fails, IRQs never arrive and the only clue would be the absence of activity. */
-        klog_warning("→ lapic_virtual_wire() map failed, PIC-direct only\n");
+        klog_warning("lapic_virtual_wire() map failed, PIC-direct only\n");
         return;
     }
     volatile uint32_t *r = (volatile uint32_t *)LAPIC_VA;
-    klog("→ lapic_virtual_wire() lint0=%08x, svr=%08x\n", r[LAPIC_LINT0], r[LAPIC_SVR]);
+    klog("• LAPIC    [OK] lint0=%08x, svr=%08x\n", r[LAPIC_LINT0], r[LAPIC_SVR]);
     r[LAPIC_SVR]   = (r[LAPIC_SVR] & ~0xFFu) | 0x100 | 0xFF;   /* software-enable, spurious vector 0xFF */
     r[LAPIC_LINT0] = 0x700;                                    /* ExtINT, unmasked */
 }
 
 void pic_init(void) {
     /* ICW1: start initialisation, expect ICW4. */
-    klog("→ pic_init()\n");
     outb(PIC1_CMD, ICW1_INIT | ICW1_ICW4); io_wait();
     outb(PIC2_CMD, ICW1_INIT | ICW1_ICW4); io_wait();
     /* ICW2: vector offsets. Without this IRQ0-7 land on vectors 8-15,
@@ -70,6 +69,7 @@ void pic_init(void) {
     irq_mask_bits = 0xFFFF;
     write_masks();
     lapic_virtual_wire();
+    klog("• PIC      [OK] base=%u\n", PIC_VECTOR_BASE);
 }
 
 /* pic_mask and pic_unmask bracket their read-modify-write of irq_mask_bits
