@@ -87,15 +87,11 @@
  */
 #define TOK_MAX 24      /* longest single parameter, e.g. "[iterations:num]" */
 
-
-/* ISA settings
- * Ref: src/core/isa.h
- * Phase = timer_ticks() % ISA_PHASE_TICKS,
- * change with care: this is the ISA's clock divider.
+/* Rnd settings
+ * Ref: src/core/dev/rnd.h
  */
-#define ISA_PHASE_TICKS 3u /* Ticks per bus cycle. */
-#define ISA_QUEUE_CAP 8u /* Fixed-capacity transaction queue, ISA reads one per cycle. */
-
+#define RND_RING_SIZE   256u          /* ring bytes */
+#define RND_SEED        0xFF00u      /* xorshift non-zero base seed */
 
 /* fail at build */
 
