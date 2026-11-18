@@ -2,11 +2,13 @@
 
 **Symbiote OS**, a tiny hobby single-thread kernel made in C-lang, agnostic bootable x86-64 using the Limine bootloader.  
 
-<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/e188f91e-c98e-4e19-bb81-7785fe733701" />  
+<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/48bddac4-3514-40a7-a9ef-bb254a15dad7" />
+
+*early testing some ideas, some might not make it in the next version*  
 
 ### Acknowledgement
 
-This is a hobby project, the `core/` is stable, providing the basics and extension to experiment with.  
+This is a hobby project so custom designs, the `/kernel/src/core/arch/` is stable, absolute basics and per-order-load app extension model.  
 **Symbiote OS** was developed with assistance from Claude (Anthropic), DeepSeek, and CursorAI,  
 used for architectural review, code generation, and audit passes, all code is reviewed and owned by the maintainer; the tools are collaborators, not authors.  
 
