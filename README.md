@@ -61,8 +61,13 @@ kernel/
       │   │   ├── vmm.h               # Virtual Memory Manager (PMM-backed paging)
       │   │   └── heap.h              # Kernel heap (block headers & HHDM coalescing)
       │   │
+      │   ├── services/               # Kernel services
+      │   │   ├── random.h			  # Randomizer with single xorshift16 buffer
+      |   |   ├── symbol.h            # Storage with strong-typed getters and setters
+      │   │   ├── router.h			  # In-Memory callback router, multiple endpoints
+      │   │   └── loop.h              # Shell-loop manager
       │   ├── dev/                    # Subsystem device drivers & abstractions
-      │   │   ├── console.h           # Console device & PS/2 interface, ISA coupled
+      │   │   ├── console.h           # Console device & PS/2 interface
       │   │   ├── keyboard.h          # Keyboard poller, reader
       │   │   ├── vfs.h               # Virtual File System (ramfs implementation)
       │   │   └── timer.h             # Programmable interval clock controller
@@ -74,8 +79,7 @@ kernel/
       │   ├── klog.h                  # Kernel logging extension
       │   ├── ext.h                   # Extension module dispatcher
       │   ├── cmd.h                   # Command-line dispatcher & interpreter
-      │   ├── symbol.h                # strong-typed variable storage, ISA coupled
-      │   ├── loop.h                  # Shell-loop manager
+      │   ├── loop.h                  # 
       │   └── shell.h                 # Interactive Shell Manager
       ├── lib/                        # Interior library
       │   ├── mem.h                   # Direct memory operation library
