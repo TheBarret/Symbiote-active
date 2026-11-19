@@ -62,9 +62,9 @@ kernel/
       │   │   └── heap.h              # Kernel heap (block headers & HHDM coalescing)
       │   │
       │   ├── services/               # Kernel services
-      │   │   ├── random.h			  # Randomizer with single xorshift16 buffer
+      │   │   ├── random.h	      # Randomizer with single xorshift16 buffer
       |   |   ├── symbol.h            # Storage with strong-typed getters and setters
-      │   │   ├── router.h			  # In-Memory callback router, multiple endpoints
+      │   │   ├── router.h	      # In-Memory callback router, multiple endpoints
       │   │   └── loop.h              # Shell-loop manager
       │   ├── dev/                    # Subsystem device drivers & abstractions
       │   │   ├── console.h           # Console device & PS/2 interface
