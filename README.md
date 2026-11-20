@@ -62,9 +62,11 @@ kernel/
       │   │   └── heap.h              # Kernel heap (block headers & HHDM coalescing)
       │   │
       │   ├── services/               # Kernel services
-      │   │   ├── random.h	      # Randomizer with single xorshift16 buffer
-      |   |   ├── symbol.h            # Storage with strong-typed getters and setters
-      │   │   ├── router.h	      # In-Memory callback router, multiple endpoints
+      │   │   ├── router.h	      # Message Bus, In-Memory, callback events
+      │   │   ├── addr.h	      # Bus address convention
+      │   │   ├── io.h	              # Bus: console 
+      │   │   ├── rnd.h	              # Bus: randomizer
+      │   │   ├── greeter.h	      # Bus: greeter
       │   │   └── loop.h              # Shell-loop manager
       │   ├── dev/                    # Subsystem device drivers & abstractions
       │   │   ├── console.h           # Console device & PS/2 interface
@@ -79,10 +81,11 @@ kernel/
       │   ├── klog.h                  # Kernel logging extension
       │   ├── ext.h                   # Extension module dispatcher
       │   ├── cmd.h                   # Command-line dispatcher & interpreter
-      │   ├── loop.h                  # 
       │   └── shell.h                 # Interactive Shell Manager
       ├── lib/                        # Interior library
       │   ├── mem.h                   # Direct memory operation library
+      │   ├── random.h	      	      # Xorshift16 randomizer library 
+      |   ├── symbol.h                # Variable storage, strong-typed library
       │   └── string.h                # String manipulation library
       ├── linker-scripts/             # Build scripts, linkers, offset partitions
       └── ext/                        # Kernel extensions, drivers, and visual assets
