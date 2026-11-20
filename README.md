@@ -62,7 +62,7 @@ kernel/
       │   │   └── heap.h              # Kernel heap (block headers & HHDM coalescing)
       │   │
       │   ├── services/               # Kernel services
-      │   │   ├── router.h	      # Message Bus, In-Memory, callback events
+      │   │   ├── router.h	      # TTA processing/message Bus, In-Memory, callback events
       │   │   ├── addr.h	      # Bus address convention
       │   │   ├── io.h	              # Bus: console 
       │   │   ├── rnd.h	              # Bus: randomizer
