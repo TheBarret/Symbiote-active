@@ -72,6 +72,7 @@
  */
 #define SYM_TAG         "\x1b[1;35;7m[KERN]\x1b[0m"
 #define SYM_TAG_EXT     "\x1b[1;36;7m[EXT]\x1b[0m"
+#define SYM_TAG_SERV    "\x1b[1;30;7m[SERVICE]\x1b[0m"
 #define SYM_TAG_INFO    "\x1b[1;34;7m[INFO]\x1b[0m"
 #define SYM_TAG_WARNING "\x1b[1;33;7m[WARNING]\x1b[0m"
 #define SYM_TAG_ERROR   "\x1b[1;31;7m[ERROR]\x1b[0m"
@@ -88,13 +89,24 @@
 #define TOK_MAX 24      /* longest single parameter, e.g. "[iterations:num]" */
 
 /* Rnd settings
- * Ref: src/core/dev/rnd.h
+ * Ref: src/lib/random.h
  */
 #define RND_RING_SIZE   256u          /* ring bytes */
 #define RND_SEED        0xFF00u      /* xorshift non-zero base seed */
+#define RND_SEED_ALT    0x00FFu      /* xorshift non-zero base seed fallback */
 
-/* fail at build */
+/* Router settings
+ * Ref: src/core/services/router.h
+ */
+#define ROUTER_SIZE_MAX 16384 /* hint: use LOG_SIZE (16kb) */
 
+/* Address settings
+ * Ref: src/core/services/addr.h
+ */
+#define ADDR_CLASS_SHIFT  12
+#define ADDR_VALUE_MASK   0x0FFFu
+
+/* Fail at build */
 _Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "config.h: PMM_PAGE_SIZE must be a power of two");
 _Static_assert((VMM_PAGE_SIZE  & (VMM_PAGE_SIZE  - 1)) == 0, "config.h: VMM_PAGE_SIZE must be a power of two");
 _Static_assert((HEAP_ALIGN     & (HEAP_ALIGN     - 1)) == 0, "config.h: HEAP_ALIGN must be a power of two");
@@ -102,5 +114,4 @@ _Static_assert(HEAP_ALIGN >= 8,                              "config.h: HEAP_ALI
 _Static_assert(HEAP_MIN_BLOCK_SIZE == HEAP_ALIGN,            "config.h: HEAP_MIN_BLOCK_SIZE must equal HEAP_ALIGN");
 _Static_assert(PMM_PAGE_SIZE == VMM_PAGE_SIZE,               "config.h: PMM and VMM must agree on page size");
 _Static_assert(TIMER_MAX_TASKS > 0,                          "config.h: TIMER_MAX_TASKS must be positive");
-
 #endif
