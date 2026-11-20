@@ -56,6 +56,7 @@ typedef struct router_device {
 
 /* transport router API */
 void router_init(void);
+void init_vsink(router_address id);
 bool router_register(const char *name, router_address id, router_rx_callback_t handler);
 void register_sink(const char *name, router_address addr, router_rx_callback_t fn);
 bool router_join_mcast(router_address id, uint8_t group);

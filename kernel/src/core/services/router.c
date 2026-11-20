@@ -4,7 +4,6 @@
 #include <core/kprintf.h>
 #include <core/klog.h>
 #include <core/services/router.h>
-#include <core/services/vsink.h>
 #include <core/services/io.h>
 #include <core/services/rnd.h>
 #include <core/services/greeter.h>
@@ -191,7 +190,13 @@ router_frame *router_create(router_address src_addr, router_address dst_addr,
     return frame;
 }
 
-/*  selftest / init  */
+/* void sink */
+static void route_to_void(router_frame *pkt) {
+    (void)pkt;
+}
+void init_vsink(router_address id) {
+    register_sink("void", id, route_to_void);
+}
 
 /* Broadcast test
  * Exercises the cast path via ADDR_BROADCAST. Passes only if at least one
@@ -205,7 +210,7 @@ void router_perform_test(void) {
     kprintf(router_send(bc) ? "...[OK]\n" : "...[FAILED]\n");
 }
 
-/* init: drops any previously registered devices so re-init does not leak. */
+/*  init  */
 void router_init(void) {
     klog_serv("Setting up environment...\n");
     router_device *d = device_head;

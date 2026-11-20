@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <core/version.h>
 
 /* Router address: 4-bit class + 12-bit value.
  *
@@ -23,8 +24,9 @@ enum addr_class {
     ADDR_CLASS_RESERVED  = 0x4,   /* .. 0xF reserved             */
 };
 
-#define ADDR_CLASS_SHIFT  12
-#define ADDR_VALUE_MASK   0x0FFFu
+/* moved to config.h */
+//#define ADDR_CLASS_SHIFT  12
+//#define ADDR_VALUE_MASK   0x0FFFu
 
 /* constructors */
 #define ADDR_MAKE(cls, val) \
