@@ -20,9 +20,11 @@
 #include <core/dev/timer.h>     // Clock controller
 /* kernel services */
 #include <core/services/loop.h> // shell loop manager
-#include <core/services/symbol.h> // symbol storage
-#include <core/services/random.h>   // randomizer, seed based xorshift16
-#include <core/services/router.h>   // miniature datagram network
+#include <core/services/router.h>
+#include <core/services/vsink.h>
+#include <core/services/io.h>
+#include <core/services/rnd.h>
+#include <core/services/greeter.h>
 /* kernel modules */
 #include <core/kprintf.h>   // Formatted output to every console
 #include <core/klog.h>      // Kernel logger extension (kern, info, warn, error)
@@ -86,9 +88,12 @@ void kmain(void) {
     }
     vfs_init();                 // filesystem storage
     /* services */
-    rnd_init(RND_SEED);         // randomizer
-    router_init();              // virtual bus
-    symbol_init();              // symbol storage
+    router_init();              // environment
+    init_vsink(ADDR_NOBODY);
+    init_io(ADDR_UNICAST(1), ADDR_UNICAST(2));
+    init_rnd(ADDR_UNICAST(3));
+    init_header();
+
     /* kernel modules end */
     klog_info("Stage 1 → Stage 2\n");
     /* stage two: extensions */
