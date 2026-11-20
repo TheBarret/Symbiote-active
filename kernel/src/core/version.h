@@ -6,7 +6,8 @@
 
 /* Global version and info tag  */
 
-#define SYM_VERSION "0.2.0"         /* major.minor.revision (0.2.0 = baseline) */
-#define SYM_VERSION_INFO "open"    /* additional meta-info */
+#define SYM_BOOTNAME        "Symbiote"  /* boot name */
+#define SYM_VERSION         "0.2.0"     /* major.minor.revision */
+#define SYM_VERSION_INFO    "open"      /* additional meta-info */
 
 #endif

@@ -17,11 +17,12 @@ struct sym_ext {
 
 /* Init order. Pick the level that matches what your extension provides. */
 enum ext_prio {
-    EXT_PRIO_CONSOLE = 0,   /* output backends       (fbcon...)   */
-    EXT_PRIO_DRIVER  = 10,  /* hardware drivers      (kbd, disk)  */
-    EXT_PRIO_FS      = 20,  /* filesystems                        */
-    EXT_PRIO_SERVICE = 30,  /* shell, loaders, daemons            */
-    EXT_PRIO_APPLET  = 40,  /* commands and small tools           */
+    EXT_PRIO_ALWAYS_FIRST   = 0,   /* always first in-line */
+    EXT_PRIO_CONSOLE        = 10,  /* output backends       (fbcon...)   */
+    EXT_PRIO_DRIVER         = 10,  /* hardware drivers      (kbd, disk)  */
+    EXT_PRIO_FS             = 20,  /* filesystems                        */
+    EXT_PRIO_SERVICE        = 30,  /* shell, loaders, daemons            */
+    EXT_PRIO_APPLET         = 40,  /* commands and small tools           */
 };
 
 #define SYM_EXTENSION(id, init_fn, prio_)                                   \

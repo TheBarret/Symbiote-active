@@ -15,5 +15,5 @@ void klog_ext(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void klog_info(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void klog_warning(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void klog_error(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-
+void klog_serv(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #endif

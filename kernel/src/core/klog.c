@@ -53,3 +53,4 @@ void klog_ext(const char *fmt, ...)      { va_list ap; va_start(ap, fmt); klog_e
 void klog_info(const char *fmt, ...)     { va_list ap; va_start(ap, fmt); klog_emit(SYM_TAG_INFO, fmt, ap);    va_end(ap); }
 void klog_warning(const char *fmt, ...)  { va_list ap; va_start(ap, fmt); klog_emit(SYM_TAG_WARNING, fmt, ap); va_end(ap); }
 void klog_error(const char *fmt, ...)    { va_list ap; va_start(ap, fmt); klog_emit(SYM_TAG_ERROR, fmt, ap);   va_end(ap); }
+void klog_serv(const char *fmt, ...)    { va_list ap; va_start(ap, fmt); klog_emit(SYM_TAG_SERV, fmt, ap);   va_end(ap); }
