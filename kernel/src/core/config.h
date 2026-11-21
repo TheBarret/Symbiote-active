@@ -3,8 +3,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
-/* codebase: 0.1.2 */
+/* codebase: 0.2.0 */
 /* incorrect settings can result in unpredictable behaviors!  */
 
 /* Serial settings
@@ -70,12 +71,13 @@
 /* Klog settings
  * Ref: src/core/klog.h
  */
-#define SYM_TAG         "\x1b[1;35;7m[KERN]\x1b[0m"
-#define SYM_TAG_EXT     "\x1b[1;36;7m[EXT]\x1b[0m"
-#define SYM_TAG_SERV    "\x1b[1;30;7m[SERVICE]\x1b[0m"
-#define SYM_TAG_INFO    "\x1b[1;34;7m[INFO]\x1b[0m"
-#define SYM_TAG_WARNING "\x1b[1;33;7m[WARNING]\x1b[0m"
-#define SYM_TAG_ERROR   "\x1b[1;31;7m[ERROR]\x1b[0m"
+#define SYM_TSC_ENABLED     false    // padding + tsc_ticks at klog_emit
+#define SYM_TAG             "\x1b[1;35;7m[KERN]\x1b[0m"
+#define SYM_TAG_EXT         "\x1b[1;36;7m[EXT]\x1b[0m"
+#define SYM_TAG_SERV        "\x1b[1;30;7m[SERVICE]\x1b[0m"
+#define SYM_TAG_INFO        "\x1b[1;34;7m[INFO]\x1b[0m"
+#define SYM_TAG_WARNING     "\x1b[1;33;7m[WARNING]\x1b[0m"
+#define SYM_TAG_ERROR       "\x1b[1;31;7m[ERROR]\x1b[0m"
 
 /* fbcon settings
  * Ref: src/ext/fbcon/fbcon.h
@@ -88,6 +90,19 @@
  */
 #define TOK_MAX 24      /* longest single parameter, e.g. "[iterations:num]" */
 
+/* Extensions settings
+ * Ref: src/core/ext.h
+ * Extension load priority table
+ */
+enum ext_prio {
+    EXT_PRIO_ALWAYS_FIRST   = 0,   // Always first in-line
+    EXT_PRIO_CONSOLE        = 10,  // Output backends
+    EXT_PRIO_DRIVER         = 10,  // Hardware drivers
+    EXT_PRIO_FS             = 20,  // Filesystem
+    EXT_PRIO_SERVICE        = 30,  // Shell applications
+    EXT_PRIO_APPLET         = 40,  // Extension applications
+};
+
 /* Rnd settings
  * Ref: src/lib/random.h
  */
@@ -98,13 +113,21 @@
 /* Router settings
  * Ref: src/core/services/router.h
  */
-#define ROUTER_SIZE_MAX 16384 /* hint: use LOG_SIZE (16kb) */
+#define ROUTER_SIZE_MAX     16384 /* hint: use LOG_SIZE (16kb) */
+#define ROUTER_MCAST_GROUPS 16u   /* Number of multicast groups; bounded by the width of router_device.mcast_groups. */
+#define ROUTER_MAX_DEPTH    8u    /* Maximum nesting of router_send, stops reply cycles (A -> B -> A) */
 
 /* Address settings
  * Ref: src/core/services/addr.h
  */
 #define ADDR_CLASS_SHIFT  12
 #define ADDR_VALUE_MASK   0x0FFFu
+
+/* Bus functions */
+#define NOBODY      0u      /* void(0) */
+#define BUS_PRINT   0x00F1u /* print(<string>) */
+#define BUS_PRINTN  0x00F3u /* print(<1/2/4-byte>) */
+#define BUS_RND     0x00F4u /* uint16_t = next_rnd() */
 
 /* Fail at build */
 _Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "config.h: PMM_PAGE_SIZE must be a power of two");

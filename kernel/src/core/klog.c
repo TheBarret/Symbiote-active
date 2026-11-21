@@ -12,9 +12,11 @@
 static uint64_t klog_last_tsc;
 static uint64_t klog_tsc_hz;
 static bool     klog_tsc_ready;
+static bool     klog_tsc_enabled;
 
 // init
-void klog_init(void) {
+void klog_init(bool state) {
+    klog_tsc_enabled = state;
     klog_tsc_hz = cpu_tsc_hz();
     klog_tsc_ready = true;
     klog_last_tsc = rdtsc();    /* first line reads [+0] */
@@ -22,27 +24,34 @@ void klog_init(void) {
         kprintf("klog_init(): TSC Found, %llu MHz\n", (unsigned long long)(klog_tsc_hz / 1000000));
     } else {
         klog_tsc_hz = 2500000000ull;    /* 2.5 GHz fallback, best-effort */
+#ifdef SYM_MEMDEBUG
         kprintf("klog_init(): TSC not found (fallback: 2.5 Ghz)\n");
+#endif
     }
 }
-
 static void klog_emit(const char *tag, const char *fmt, va_list ap) {
-    uint64_t now = rdtsc();
-    uint64_t delta = now - klog_last_tsc;
-    klog_last_tsc = now;
+    if (klog_tsc_enabled) {
+        uint64_t now = rdtsc();
+        uint64_t delta = now - klog_last_tsc;
+        klog_last_tsc = now;
 
-    char stamp[24];
-    if (klog_tsc_hz) {
-        uint64_t us = delta * 1000000ull / klog_tsc_hz;
-        ksnprintf(stamp, sizeof stamp, "[+%llu.%03llu]",
-                  (unsigned long long)(us / 1000),
-                  (unsigned long long)(us % 1000));
+        char stamp[24];
+        if (klog_tsc_hz) {
+            /* Use __uint128_t if available so (delta * 1e6) doesn't overflow on long idle gaps */
+            uint64_t us = (uint64_t)(((__uint128_t)delta * 1000000ull) / klog_tsc_hz);
+            ksnprintf(stamp, sizeof(stamp), "[+%llu.%03llu]",
+                      (unsigned long long)(us / 1000ull),
+                      (unsigned long long)(us % 1000ull));
+        } else {
+            ksnprintf(stamp, sizeof(stamp), "[+%llu]", (unsigned long long)delta);
+        }
+        stamp[sizeof(stamp) - 1] = '\0';
+
+        /* Fixed 14-char column + 1 separator space */
+        kprintf("%-14.14s ", stamp);
     } else {
-        ksnprintf(stamp, sizeof stamp, "[+%llu]", (unsigned long long)delta);
+        kprintf("[◙] ");
     }
-
-    /* padding */
-    kprintf("%-10.10s ", stamp);
 
     kprintf("%s ", tag);
     kvprintf(fmt, ap);
