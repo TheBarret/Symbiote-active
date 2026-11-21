@@ -2,7 +2,7 @@
 
 **Symbiote OS**, a tiny hobby single-thread kernel made in C-lang, agnostic bootable x86-64 using the Limine bootloader.  
 
-<img width="356" height="263" alt="bootlog" src="https://github.com/user-attachments/assets/8cf1e9a8-c0ae-41f8-98e7-d04481d01b27" />
+<img width="466" height="373" alt="bootlog" src="https://github.com/user-attachments/assets/8cf1e9a8-c0ae-41f8-98e7-d04481d01b27" />
 <img width="356" height="263" alt="memory" src="https://github.com/user-attachments/assets/534fc480-6fac-499d-84e6-0b4360c3571c" />
 
 
