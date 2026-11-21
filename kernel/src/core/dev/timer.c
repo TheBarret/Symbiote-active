@@ -9,7 +9,7 @@
 #include <core/kprintf.h>
 #include <core/klog.h>
 
-/* codebase: 0.1.3 */
+/* codebase: 0.2.0 */
 
 static volatile uint64_t ticks;
 static uint64_t divisor = 1;
