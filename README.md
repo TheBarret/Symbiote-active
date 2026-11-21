@@ -4,8 +4,8 @@
 
 <img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/8cf1e9a8-c0ae-41f8-98e7-d04481d01b27" />  
 
-<img width="446" height="353" alt="memory" src="https://github.com/user-attachments/assets/f5f978ec-0f23-42d9-8583-e4de052c2b50" />
-<img width="446" height="353" alt="image" src="https://github.com/user-attachments/assets/54914bec-1ebb-42f6-beec-5e53af67fdd8" />
+<img width="436" height="323" alt="memory" src="https://github.com/user-attachments/assets/f5f978ec-0f23-42d9-8583-e4de052c2b50" />
+<img width="436" height="323" alt="image" src="https://github.com/user-attachments/assets/54914bec-1ebb-42f6-beec-5e53af67fdd8" />
 
 
 *early experiments, basic extension manager, ramfs, heap, console, keyboard and a message broker for services*   
