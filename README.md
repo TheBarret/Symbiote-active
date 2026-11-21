@@ -1,4 +1,5 @@
-# Symbiote (active development, subject to changes)
+# Symbiote Kernel
+*This repo is active development, subject to changes*  
 
 **Symbiote OS**, a tiny hobby single-thread kernel made in C-lang, agnostic bootable x86-64 using the Limine bootloader.  
 
