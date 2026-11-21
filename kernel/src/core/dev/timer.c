@@ -9,7 +9,7 @@
 #include <core/kprintf.h>
 #include <core/klog.h>
 
-/* codebase: 0.1.2 */
+/* codebase: 0.1.3 */
 
 static volatile uint64_t ticks;
 static uint64_t divisor = 1;
@@ -18,19 +18,20 @@ static bool inited;
 /* bus back-end */
 
 struct timer_task {
-    uint64_t deadline_ticks;   /* fire when ticks >= */
-    void   (*cb)(void *);
-    void    *arg;
-    int      id;
-    bool     active;
-    bool     ready;
+    uint64_t      deadline_ticks;   /* fire when ticks >= */
+    void        (*cb)(void *);
+    void         *arg;
+    int           id;
+    bool          active;
+    volatile bool ready;            /* set by the ISR, cleared by thread context */
 };
 
 static struct timer_task tasks[TIMER_MAX_TASKS];
-static int next_task_id = 1;   /* 0 means "no id"; wraps are ignored */
+static int next_task_id = 1;        /* 0 means "no id" */
 static bool in_drain = false;
 
-/* Runs in IRQ context: count and nothing else. */
+/* Runs in IRQ context: count, and mark due tasks ready. Cost is
+ * O(TIMER_MAX_TASKS) per tick. */
 static void timer_irq(void *ctx) {
     (void)ctx;
     ticks++;
@@ -42,96 +43,69 @@ static void timer_irq(void *ctx) {
     }
 }
 
+/* Next task id: always positive, wraps from INT32_MAX back to 1 without
+ * signed overflow. */
+static int timer_alloc_id(void) {
+    int id = next_task_id;
+    next_task_id = (next_task_id == INT32_MAX) ? 1 : next_task_id + 1;
+    return id;
+}
+
 /* Timer: ms -> ticks safe conversions
- *
  *
  *     ticks = f(ms * hz / 1000)
  *
- * where f is the rounding function. The product ms * hz can overflow
- * for very large ms, so the computation is split:
+ * where f is the rounding function. The product ms * hz can overflow, so the
+ * computation is split:
  *
- *     whole = (ms / 1000) * hz
- *     rem   = (ms % 1000) * hz
+ *     whole = (ms / 1000) * hz            integer part
+ *     rem   = (ms % 1000) * hz            remaining numerator over 1000
+ *     ticks = whole + (rem + bias) / 1000
  *
- * whole is the integer part of ms * hz / 1000,
- * and rem is the remaining numerator over 1000.
- * Each product is bounded by ms * hz / 1000 in the worst case,
- * so the split removes the overflow risk for any ms that a caller would realistically pass.
+ * bias selects the rounding: 0 = floor, 999 = ceil, 500 = round (ties up).
  *
- * If hz == 0 (timer not initialised), all three return 0.
- * The caller gets "no delay" rather than a garbage conversion,
- * and a subsequent timer_after() will fire on the next tick rather than wait forever.
+ * rem is always small (< 1000 * 2^32), so only `whole` can overflow. If the
+ * result would not fit, the conversion saturates at UINT64_MAX. Callers treat
+ * UINT64_MAX as "unrepresentable".
+ *
+ * Returns 0 if ms == 0, or if the timer is not initialised (the caller gets
+ * "no delay" rather than a conversion at a frequency that is not running).
  */
+static uint64_t ms_to_ticks_biased(uint64_t ms, uint64_t bias) {
+    if (ms == 0 || !inited)
+        return 0;
 
-static uint64_t ms_to_ticks_prepare(uint64_t ms, uint64_t *whole_out,
-                                    uint64_t *rem_out) {
-    /* Returns hz, or 0 if the timer is not initialised.
-     * On success, fills *whole_out and *rem_out such that:
-     * ms * hz == whole * 1000 + rem, with 0 <= rem < 1000. */
     uint64_t hz = timer_hz();
     if (hz == 0)
         return 0;
 
-    uint64_t whole = (ms / 1000) * hz;
-    uint64_t rem   = (ms % 1000) * hz;
-    *whole_out = whole;
-    *rem_out   = rem;
-    return hz;
+    uint64_t secs = ms / 1000;
+    /* result <= secs * hz + hz, so require secs <= UINT64_MAX / hz - 1 */
+    if (secs > UINT64_MAX / hz - 1)
+        return UINT64_MAX;
+
+    return secs * hz + ((ms % 1000) * hz + bias) / 1000;
 }
 
-uint64_t ms_to_ticks_floor(uint64_t ms) {
-    if (ms == 0)
-        return 0;
-
-    uint64_t whole, rem;
-    uint64_t hz = ms_to_ticks_prepare(ms, &whole, &rem);
-    if (hz == 0)
-        return 0;
-
-    /* floor: whole + rem / 1000 (integer division) */
-    return whole + rem / 1000;
-}
-
-uint64_t ms_to_ticks_ceil(uint64_t ms) {
-    if (ms == 0)
-        return 0;
-
-    uint64_t whole, rem;
-    uint64_t hz = ms_to_ticks_prepare(ms, &whole, &rem);
-    if (hz == 0)
-        return 0;
-
-    /* ceil: whole + (rem + 999) / 1000 */
-    return whole + (rem + 999) / 1000;
-}
-
-uint64_t ms_to_ticks_round(uint64_t ms) {
-    if (ms == 0)
-        return 0;
-
-    uint64_t whole, rem;
-    uint64_t hz = ms_to_ticks_prepare(ms, &whole, &rem);
-    if (hz == 0)
-        return 0;
-
-    /* round to nearest: whole + (rem + 500) / 1000.
-     * Ties (rem == 500) round up, matching the "half away from zero"
-     * convention used elsewhere in this codebase. */
-    return whole + (rem + 500) / 1000;
-}
+uint64_t ms_to_ticks_floor(uint64_t ms) { return ms_to_ticks_biased(ms, 0);   }
+uint64_t ms_to_ticks_ceil (uint64_t ms) { return ms_to_ticks_biased(ms, 999); }
+uint64_t ms_to_ticks_round(uint64_t ms) { return ms_to_ticks_biased(ms, 500); }
 
 void timer_sleep_ms(uint64_t ms) {
     if (in_drain)
         PANIC("timer_sleep_ms from a drain callback");
-    if (!inited || ms == 0)
+    if (ms == 0)
         return;
+    if (!inited) {
+        klog_warning("timer_sleep_ms: timer not initialised, not sleeping\n");
+        return;
+    }
 
-    /* The conversion saturates internally; no local clamp needed. */
     uint64_t need = ms_to_ticks_ceil(ms);
     if (need == 0)
         need = 1;   /* a nonzero request sleeps at least one tick */
-    if (need > UINT64_MAX - ticks) {
-        klog_warning("timer_sleep_ms: duration unrepresentable\n");
+    if (need == UINT64_MAX || need > UINT64_MAX - ticks) {
+        klog_warning("timer_sleep_ms: duration unrepresentable, not sleeping\n");
         return;
     }
 
@@ -145,8 +119,16 @@ void timer_sleep_ms(uint64_t ms) {
 }
 
 int timer_after(uint64_t ms, void (*cb)(void *), void *arg) {
-    if (cb == NULL)
+    if (cb == NULL) {
+        klog_warning("timer_after: null callback\n");
         return -1;
+    }
+    if (!inited)
+        klog_warning("timer_after before timer_init: delay ignored, task fires on the first tick\n");
+
+    uint64_t need = ms_to_ticks_ceil(ms);
+    if (need == UINT64_MAX)
+        klog_warning("timer_after: duration saturated, task will effectively never fire\n");
 
     uint64_t flags = cpu_irq_save();
     int result = -1;
@@ -155,11 +137,7 @@ int timer_after(uint64_t ms, void (*cb)(void *), void *arg) {
         if (tasks[i].id != 0)
             continue;
 
-        int id = next_task_id++;
-        if (next_task_id <= 0)
-            next_task_id = 1;   /* wrap; stale ids simply never match */
-
-        uint64_t need = ms_to_ticks_ceil(ms);
+        int id = timer_alloc_id();
         tasks[i].deadline_ticks = (need > UINT64_MAX - ticks) ? UINT64_MAX : ticks + need;
         tasks[i].cb             = cb;
         tasks[i].arg            = arg;
@@ -171,6 +149,11 @@ int timer_after(uint64_t ms, void (*cb)(void *), void *arg) {
     }
 
     cpu_irq_restore(flags);
+
+    /* log outside the IRQ-off region */
+    if (result < 0)
+        klog_warning("timer_after: no free task slot (TIMER_MAX_TASKS=%u)\n",
+                     (unsigned)TIMER_MAX_TASKS);
     return result;
 }
 
@@ -197,8 +180,9 @@ int timer_cancel(int id) {
     return result;
 }
 
-/* Pre-IRQ-save reads are safe because: ISR only sets ready false→true;
- * cancel/drain both run in thread context; in_drain blocks reentrancy. */
+/* Pre-IRQ-save reads are safe because: ISR only sets ready false->true;
+ * cancel/drain both run in thread context; in_drain blocks reentrancy.
+ * Tasks run in slot order, not deadline or scheduling order. */
 void timer_drain(void) {
     if (in_drain)
         return;   /* not reentrant */
@@ -258,17 +242,38 @@ size_t timer_tasks_pending(void) {
     return n;
 }
 
-
+/* timer init (hz)
+ *
+ * 0x34 = 0 0 | 1 1 | 0 1 0 | 0
+ *        │ │   │ │   │ │ │   └─ 0: count in binary (1 would be BCD)
+ *        │ │   │ │   └─┴─┴──── 010: mode 2
+ *        │ │   └─┴──────────── 11: write the divisor as low byte, then high byte
+ *        └─┴─────────────────── 00: channel 0
+ *
+ * Channel	Output	                Usage
+ * 0	    IRQ 0 on the PIC	    kernel tick (timer.h->timer_tick())
+ * 1	    RAM                     refresh circuitry obsolete, don't use
+ * 2	    PC speaker	            beeper and sometimes a calibration source
+ *
+ * Mode 	Name	                    Behaviour
+ * 0        interrupt	                fires once, until re-programmed
+ * 1	    hardware one-shot	        waits for a gate signal first
+ * 2	    rate generator	            fires, reloads the divisor itself, repeats forever
+ * 3	    square wave	                repeats like mode 2, but the output is a 50% duty cycle wave
+ * 4	    software strobe	            one pulse after a programmed delay
+ * 5	    hardware strobe	            one pulse, started by a gate signal
+*/
 void timer_init(uint32_t hz) {
     if (inited) {
-        klog_warning("timer_init called twice\n");
+        klog_warning("timer_init called twice, ignoring...\n");
         return;
     }
-    if (hz == 0)
-        hz = TIMER_HZ; // = 1000hz
-    uint64_t d = PIT_FREQ / hz;
-    if (d < 1)     d = 1;
-    if (d > 65535) d = 65535;       /* 16-bit counter */
+
+    uint32_t want = (hz == 0) ? TIMER_HZ : hz;   /* TIMER_HZ = 1000hz */
+    uint64_t d = PIT_FREQ / want;
+    bool clamped = false;
+    if (d < 1)     { d = 1;     clamped = true; }
+    if (d > 65535) { d = 65535; clamped = true; }   /* 16-bit counter */
     divisor = d;
 
     outb(PIT_CMD, 0x34);            /* channel 0, lobyte/hibyte, mode 2 (rate generator) */
@@ -278,6 +283,13 @@ void timer_init(uint32_t hz) {
     if (irq_register(0, timer_irq, NULL) != 0)
         PANIC("timer: IRQ0 already taken");
     inited = true;
-    klog("• TIMER    [OK] freq_hz=%u, irq=0, channel=0, mode=2\n", hz);
 
+    if (clamped)
+        klog_warning("timer_init: %u Hz is out of range, running at %u Hz\n",
+                     (unsigned)want, (unsigned)timer_hz());
+    klog("• TIMER    [OK] freq=%uHz, pfreq=%uHz, divisor=%u, clamped=%s\n",
+                    (unsigned)timer_hz(),
+                    (unsigned)PIT_FREQ,
+                    (unsigned)timer_divisor(),
+                    clamped ? "true" : "false");
 }
