@@ -5,7 +5,7 @@
 **Symbiote OS** is a small, hobby, single-threaded x86-64 kernel written in C.  
 It uses the Limine bootloader and is built as a hybrid BIOS/UEFI ISO.  
 
-Symbiote is guided by a simple premise: **everything is expensive**.  
+The design is guided by a simple premise: **everything on the kernel is expensive**.  
 Memory, code, boot state, abstractions, and hardware support all have a real cost.   
 The kernel therefore treats each host as a symbiotic partner: it uses Limine for the work it can safely delegate,   
 retains only the facilities needed for a useful environment, and replaces the machinery of a general-purpose kernel with smaller, purpose-built contracts.  
