@@ -9,13 +9,7 @@
 #include <core/panic.h>
 #include <core/klog.h>
 
-
-/* codebase: 0.2.0 */
-
-/* Hard cap on the number of free ranges the arena tracks.
- * Reached only by heavy churn of mixed-size STRING allocations.
- * Overflow is SYM_NO_SPACE, never a silent leak. Tune if needed. */
-#define SYMBOL_FREE_RANGES_MAX 64u
+/* codebase: 0.3.0 (flat names) */
 
 /* One arena free range: [off, off + len). Ranges are disjoint, sorted by off,
  * and coalesced on free (never two adjacent ranges). */
@@ -49,14 +43,10 @@ struct symbol_device {
     uint64_t             n_set;
     uint64_t             n_get;
     uint64_t             n_unset;
-    uint64_t             n_reclaim_space;
+    uint64_t             n_leaked_bytes;   /* releases that could not be tracked */
 };
 
 static struct symbol_device *g_sym;
-
-/* forward decls */
-static int sym_arena_claim(struct symbol_device *d, uint32_t len, uint32_t *out_off);
-static void sym_arena_release(struct symbol_device *d, uint32_t off, uint32_t len);
 
 /* TYPE widths */
 
@@ -89,6 +79,18 @@ static bool sym_value_bytes(uint8_t type, size_t len, uint32_t *out_bytes) {
     if (w == 0) return false;
     if (len != w) return false;
     *out_bytes = w;
+    return true;
+}
+
+/* NAME */
+
+/* Bounded length scan: never reads past SYMBOL_NAME_MAX + 1 bytes, so an
+ * unterminated name from a bus payload cannot run away. */
+static bool sym_name_len(const char *name, size_t *out_len) {
+    size_t n = 0;
+    while (n <= SYMBOL_NAME_MAX && name[n] != '\0') n++;
+    if (n == 0 || n > SYMBOL_NAME_MAX) return false;
+    *out_len = n;
     return true;
 }
 
@@ -130,9 +132,9 @@ static void sym_mask_unaccount(struct symbol_device *d, uint32_t mask) {
 
 /* ARENA */
 
-/* Claim `len` bytes. First-fit over the sorted free list, coalescing assumed
- * (adjacent ranges never coexist). Falls back to bump allocation from the
- * high-water mark if no free range fits. Returns SYM_NO_SPACE on overflow. */
+/* Claim `len` bytes. First-fit over the sorted free list (adjacent ranges
+ * never coexist), falling back to bump allocation from the high-water mark.
+ * Returns SYM_NO_SPACE on overflow. Mutates nothing on failure. */
 static int sym_arena_claim(struct symbol_device *d, uint32_t len, uint32_t *out_off) {
     if (len == 0) return SYM_INVALID_ARGS;
 
@@ -141,7 +143,6 @@ static int sym_arena_claim(struct symbol_device *d, uint32_t len, uint32_t *out_
         if (r->len < len) continue;
         *out_off = r->off;
         if (r->len == len) {
-            /* Consume the range. */
             for (size_t j = i + 1; j < d->free_count; j++)
                 d->free_ranges[j - 1] = d->free_ranges[j];
             d->free_count--;
@@ -152,7 +153,6 @@ static int sym_arena_claim(struct symbol_device *d, uint32_t len, uint32_t *out_
         return SYM_OK;
     }
 
-    /* Bump from high-water mark. */
     if ((size_t)d->arena_used + len > d->arena_size)
         return SYM_NO_SPACE;
     *out_off = (uint32_t)d->arena_used;
@@ -160,134 +160,69 @@ static int sym_arena_claim(struct symbol_device *d, uint32_t len, uint32_t *out_
     return SYM_OK;
 }
 
-/* Read-only: can `new_len` bytes be allocated given that the range
- * (old_off, old_len) will become available (replace case)? Pass old_len == 0
- * for a fresh insert. Does not mutate the arena.
- *
- * The answer is true iff, after the old range is conceptually returned to the
- * free list, some contiguous run of >= new_len bytes exists among:
- *   - any single existing free range,
- *   - the old range itself (which the caller owns),
- *   - the bump tail [arena_used, arena_size).
- * A free range adjacent to the old range can merge with it, which is why the
- * check tests each free range individually and the old range individually —
- * merged runs are never *smaller* than their parts, so single-range checks
- * are conservative in the right direction (they can under-count by not merging,
- * never over-count). Under-counting is the honest direction: we may refuse a
- * write that would fit after a merge, but we never claim a fit that isn't there.
- */
-
-static bool sym_arena_fits_replace(struct symbol_device *d, uint32_t new_len,
-                                   uint32_t old_off, uint32_t old_len) {
-    if (new_len == 0) return false;
-    if (new_len <= old_len) return true;              /* shrinks or equal: old range suffices */
-
-    if ((size_t)d->arena_used + new_len <= d->arena_size) {
-        /* Bump tail alone might fit. Still need to be sure the *claimed* range
-         * will be obtainable: claim prefers the free list, then bump. If a free
-         * range fits, commit will use it; if not, bump. Either way, a fit exists. */
-        for (size_t i = 0; i < d->free_count; i++)
-            if (d->free_ranges[i].len >= new_len) return true;
-        /* Bump tail fits only if we're not in the odd case where the old range
-         * is interleaved and bump would collide — it can't, bump is always at
-         * the high-water mark, above every free range and every live range. */
-        return true;
+/* If the last free range touches the high-water mark, give it back to the
+ * bump region. Keeps the free table short and lets the tail be reused. */
+static void sym_arena_trim_tail(struct symbol_device *d) {
+    if (d->free_count == 0) return;
+    struct sym_range *r = &d->free_ranges[d->free_count - 1];
+    if ((size_t)r->off + r->len == d->arena_used) {
+        d->arena_used = r->off;
+        d->free_count--;
     }
-
-    /* Bump tail is too small. A free range must cover it, OR the old range
-     * plus an adjacent free range must merge to cover it.
-     * Check each free range alone first. */
-    for (size_t i = 0; i < d->free_count; i++)
-        if (d->free_ranges[i].len >= new_len) return true;
-
-    /* Check old range + any free range that is adjacent on either side. */
-    for (size_t i = 0; i < d->free_count; i++) {
-        struct sym_range *r = &d->free_ranges[i];
-        bool adj_before = (r->off + r->len == old_off);
-        bool adj_after  = (old_off + old_len == r->off);
-        if (adj_before || adj_after) {
-            if ((uint64_t)r->len + old_len >= new_len) return true;
-        }
-    }
-
-    /* Old range alone (when new_len > old_len, this can't help; skip). */
-    return false;
 }
 
-/* Release `len` bytes at `off` back to the free list, coalescing with
- * adjacent ranges. Overflow of the free-range table is treated as a
- * leak-free failure: the range is NOT returned, but no corruption occurs.
- * (See header note: overflow is SYM_NO_SPACE on the *next* set, never silent UB.) */
+/* Release `len` bytes at `off`, coalescing with neighbours. Merging never
+ * needs a new table slot, so it cannot fail. Only a range with no neighbour
+ * needs a slot; if the table is full that range is leaked (counted in stats),
+ * never corrupted. */
 static void sym_arena_release(struct symbol_device *d, uint32_t off, uint32_t len) {
     if (len == 0) return;
 
-    if (d->free_count >= SYMBOL_FREE_RANGES_MAX) {
-        /* Cannot track another range. Drop it: the arena doesn't shrink,
-         * so a dropped release is a leak, not corruption. */
-        return;
-    }
-
-    /* Insert sorted by off, coalescing neighbours. */
     size_t pos = 0;
     while (pos < d->free_count && d->free_ranges[pos].off < off) pos++;
 
-    /* Coalesce with previous if contiguous. */
-    if (pos > 0) {
-        struct sym_range *prev = &d->free_ranges[pos - 1];
-        if (prev->off + prev->len == off) {
-            prev->len += len;
-            /* Coalesce with next if contiguous. */
-            if (pos < d->free_count && prev->off + prev->len == d->free_ranges[pos].off) {
-                prev->len += d->free_ranges[pos].len;
-                for (size_t j = pos + 1; j < d->free_count; j++)
-                    d->free_ranges[j - 1] = d->free_ranges[j];
-                d->free_count--;
-            }
-            return;
-        }
-    }
-    /* Coalesce with next if contiguous. */
-    if (pos < d->free_count && off + len == d->free_ranges[pos].off) {
+    bool merge_prev = pos > 0 &&
+        d->free_ranges[pos - 1].off + d->free_ranges[pos - 1].len == off;
+    bool merge_next = pos < d->free_count &&
+        off + len == d->free_ranges[pos].off;
+
+    if (merge_prev && merge_next) {
+        d->free_ranges[pos - 1].len += len + d->free_ranges[pos].len;
+        for (size_t j = pos + 1; j < d->free_count; j++)
+            d->free_ranges[j - 1] = d->free_ranges[j];
+        d->free_count--;
+    } else if (merge_prev) {
+        d->free_ranges[pos - 1].len += len;
+    } else if (merge_next) {
         d->free_ranges[pos].off = off;
         d->free_ranges[pos].len += len;
+    } else if ((size_t)off + len == d->arena_used) {
+        /* topmost block, no neighbour: just lower the high-water mark */
+        d->arena_used = off;
         return;
+    } else {
+        if (d->free_count >= SYMBOL_FREE_RANGES_MAX) {
+            d->n_leaked_bytes += len;
+            return;
+        }
+        for (size_t j = d->free_count; j > pos; j--)
+            d->free_ranges[j] = d->free_ranges[j - 1];
+        d->free_ranges[pos].off = off;
+        d->free_ranges[pos].len = len;
+        d->free_count++;
     }
-    /* No neighbour: insert a new range. */
-    for (size_t j = d->free_count; j > pos; j--)
-        d->free_ranges[j] = d->free_ranges[j - 1];
-    d->free_ranges[pos].off = off;
-    d->free_ranges[pos].len = len;
-    d->free_count++;
-}
-
-/* KEY BLOCK */
-
-/* One kmalloc for ns\0name\0. kfree(key) frees both. */
-static int sym_stage_key(const char *ns, size_t ns_len,
-                         const char *name, size_t name_len,
-                         char **out_key, char **out_ns, char **out_name) {
-    char *block = kmalloc(ns_len + name_len + 2);
-    if (block == NULL) return SYM_NO_SPACE;
-    char *p = block;
-    memcpy(p, ns, ns_len);       p[ns_len] = '\0';       *out_ns = p;    p += ns_len + 1;
-    memcpy(p, name, name_len);   p[name_len] = '\0';     *out_name = p;
-    *out_key = block;
-    return SYM_OK;
+    sym_arena_trim_tail(d);
 }
 
 /* LOOKUP */
 
-/* Raw lookup: returns the live entry for (ns,name) regardless of expiry.
- * There is at most one live entry per key (set reclaims before insert). */
+/* Returns the live entry for `name`. There is at most one per name. */
 static struct symbol_entry *sym_lookup(struct symbol_device *d,
-                                       const char *ns, size_t ns_len,
                                        const char *name, size_t name_len) {
     for (size_t i = 0; i < d->capacity; i++) {
         struct symbol_entry *s = &d->entries[i];
         if (!s->live) continue;
-        if (s->ns_len != ns_len) continue;
         if (s->name_len != name_len) continue;
-        if (memcmp(s->ns, ns, ns_len) != 0) continue;
         if (memcmp(s->name, name, name_len) != 0) continue;
         return s;
     }
@@ -302,86 +237,62 @@ static struct symbol_entry *sym_find_free_slot(struct symbol_device *d) {
 
 /* PUBLIC: set */
 
-int symbol_set(const char *ns, const char *name,
-               const void *value, size_t len, uint32_t mask) {
+int symbol_set(const char *name, const void *value, size_t len, uint32_t mask) {
     struct symbol_device *d = g_sym;
     if (d == NULL) return SYM_NO_DEVICE;
-    if (ns == NULL || name == NULL || value == NULL) return SYM_INVALID_ARGS;
+    if (name == NULL || value == NULL) return SYM_INVALID_ARGS;
 
-    size_t ns_len = strlen(ns), name_len = strlen(name);
-    if (ns_len == 0 || name_len == 0) return SYM_INVALID_ARGS;
-    if (ns_len > SYMBOL_NAME_MAX || name_len > SYMBOL_NAME_MAX) return SYM_INVALID_ARGS;
+    size_t name_len;
+    if (!sym_name_len(name, &name_len)) return SYM_INVALID_ARGS;
 
     uint8_t type = symbol_mask_type(mask);
     uint32_t bytes = 0;
     if (!sym_value_bytes(type, len, &bytes)) return SYM_INVALID_ARGS;
 
     /* STRING must carry its terminating NUL inside the declared length. */
-    if (type == SYM_TYPE_STRING) {
-        const char *s = (const char *)value;
-        if (s[len - 1] != '\0') return SYM_INVALID_ARGS;
-    }
+    if (type == SYM_TYPE_STRING && ((const char *)value)[len - 1] != '\0')
+        return SYM_INVALID_ARGS;
 
-    /* Locate any existing live entry for this key (for READONLY + replace). */
-    struct symbol_entry *existing = sym_lookup(d, ns, ns_len, name, name_len);
+    struct symbol_entry *existing = sym_lookup(d, name, name_len);
 
     /* READONLY: refuse overwrite. Unset is still allowed (caller's job). */
     if (existing != NULL && (existing->mask & SYM_FLAG_READONLY))
         return SYM_READONLY;
 
-    /* Slot availability: replacing reuses the existing slot; inserting needs a free one. */
-    if (existing == NULL && sym_find_free_slot(d) == NULL)
-        return SYM_NO_SPACE;
+    struct symbol_entry *slot = existing ? existing : sym_find_free_slot(d);
+    if (slot == NULL) return SYM_NO_SPACE;
 
-    /* Prove arena fit BEFORE staging anything. No mutation on this path. */
-    uint32_t old_off = (existing != NULL) ? existing->value_off : 0;
-    uint32_t old_len = (existing != NULL) ? existing->value_len : 0;
-    if (!sym_arena_fits_replace(d, bytes, old_off, old_len))
-        return SYM_NO_SPACE;
-
-    /* Stage key block. Heap exhaustion is the last thing that can fail before commit. */
-    char *n_key = NULL, *n_ns = NULL, *n_name = NULL;
-    int st = sym_stage_key(ns, ns_len, name, name_len, &n_key, &n_ns, &n_name);
-    if (st != SYM_OK) return st;
-
-    /* Commit. Fit was proven; claim cannot fail. If it somehow does, panic rather
-     * than leave partial state — this is an invariant violation, not a caller error. */
-    if (existing != NULL)
-        sym_arena_release(d, old_off, old_len);
-
-    uint32_t new_off = 0;
-    st = sym_arena_claim(d, bytes, &new_off);
-    if (st != SYM_OK) {
-        kfree(n_key);
-        PANIC("symbol: arena claim failed after fit was proven");
-    }
-
-    struct symbol_entry *slot = existing;
-    if (slot == NULL) {
-        slot = sym_find_free_slot(d);
-        if (slot == NULL) {
-            /* Slot disappeared between check and commit: should not happen. */
-            sym_arena_release(d, new_off, bytes);
-            kfree(n_key);
-            return SYM_INTERNAL;
-        }
-        d->count++;
+    /* Place the value. The only step that can fail, and it runs before any
+     * mutation of the entry, so failure leaves the store exactly as it was.
+     *  - shrink/equal replace: reuse the old offset, give the tail back
+     *  - otherwise: claim a new range, then release the old one
+     * (growing a value briefly needs old + new space; no panic path.) */
+    uint32_t off;
+    if (existing != NULL && bytes <= existing->value_len) {
+        off = existing->value_off;
+        sym_arena_release(d, off + bytes, existing->value_len - bytes);
     } else {
-        kfree(slot->key);
-        sym_mask_unaccount(d, slot->mask);
+        int st = sym_arena_claim(d, bytes, &off);
+        if (st != SYM_OK) return st;
+        if (existing != NULL)
+            sym_arena_release(d, existing->value_off, existing->value_len);
     }
 
-    slot->key = n_key;
-    slot->ns = n_ns;
-    slot->name = n_name;
-    slot->ns_len = (uint32_t)ns_len;
-    slot->name_len = (uint32_t)name_len;
-    slot->value_off = new_off;
-    slot->value_len = bytes;
-    slot->mask = mask;
-    slot->live = true;
+    if (existing != NULL) {
+        sym_mask_unaccount(d, existing->mask);
+    } else {
+        memcpy(slot->name, name, name_len);
+        slot->name[name_len] = '\0';
+        slot->name_len = (uint32_t)name_len;
+        d->count++;
+    }
 
-    memcpy(d->arena + new_off, value, bytes);
+    slot->value_off = off;
+    slot->value_len = bytes;
+    slot->mask      = mask;
+    slot->live      = true;
+
+    memcpy(d->arena + off, value, bytes);
 
     sym_mask_account(d, mask);
     d->n_set++;
@@ -390,16 +301,15 @@ int symbol_set(const char *ns, const char *name,
 
 /* PUBLIC: get */
 
-int symbol_get(const char *ns, const char *name,
-               void *buf, size_t buf_max, size_t *len_out) {
+int symbol_get(const char *name, void *buf, size_t buf_max, size_t *len_out) {
     struct symbol_device *d = g_sym;
     if (d == NULL) return SYM_NO_DEVICE;
-    if (ns == NULL || name == NULL || buf == NULL) return SYM_INVALID_ARGS;
+    if (name == NULL || buf == NULL) return SYM_INVALID_ARGS;
 
-    size_t ns_len = strlen(ns), name_len = strlen(name);
-    if (ns_len == 0 || name_len == 0) return SYM_INVALID_ARGS;
+    size_t name_len;
+    if (!sym_name_len(name, &name_len)) return SYM_INVALID_ARGS;
 
-    struct symbol_entry *s = sym_lookup(d, ns, ns_len, name, name_len);
+    struct symbol_entry *s = sym_lookup(d, name, name_len);
     if (s == NULL) return SYM_NOT_FOUND;
 
     if (len_out != NULL) *len_out = s->value_len;
@@ -412,43 +322,40 @@ int symbol_get(const char *ns, const char *name,
 
 /* PUBLIC: unset */
 
-int symbol_unset(const char *ns, const char *name) {
+int symbol_unset(const char *name) {
     struct symbol_device *d = g_sym;
     if (d == NULL) return SYM_NO_DEVICE;
-    if (ns == NULL || name == NULL) return SYM_INVALID_ARGS;
+    if (name == NULL) return SYM_INVALID_ARGS;
 
-    size_t ns_len = strlen(ns), name_len = strlen(name);
-    if (ns_len == 0 || name_len == 0) return SYM_INVALID_ARGS;
+    size_t name_len;
+    if (!sym_name_len(name, &name_len)) return SYM_INVALID_ARGS;
 
-    struct symbol_entry *s = sym_lookup(d, ns, ns_len, name, name_len);
+    struct symbol_entry *s = sym_lookup(d, name, name_len);
     if (s == NULL) return SYM_NOT_FOUND;
 
     sym_mask_unaccount(d, s->mask);
     sym_arena_release(d, s->value_off, s->value_len);
-    kfree(s->key);
 
-    s->key = NULL;
-    s->ns = NULL;
-    s->name = NULL;
-    s->ns_len = s->name_len = 0;
+    s->name[0]   = '\0';
+    s->name_len  = 0;
     s->value_off = s->value_len = 0;
-    s->mask = 0;
-    s->live = false;
+    s->mask      = 0;
+    s->live      = false;
 
     if (d->count > 0) d->count--;
     d->n_unset++;
     return SYM_OK;
 }
 
-int symbol_is_exist(const char *ns, const char *name) {
+int symbol_is_exist(const char *name) {
     struct symbol_device *d = g_sym;
     if (d == NULL) return SYM_NO_DEVICE;
-    if (ns == NULL || name == NULL) return SYM_INVALID_ARGS;
+    if (name == NULL) return SYM_INVALID_ARGS;
 
-    size_t ns_len = strlen(ns), name_len = strlen(name);
-    if (ns_len == 0 || name_len == 0) return SYM_INVALID_ARGS;
+    size_t name_len;
+    if (!sym_name_len(name, &name_len)) return SYM_INVALID_ARGS;
 
-    return sym_lookup(d, ns, ns_len, name, name_len) ? SYM_OK : SYM_NOT_FOUND;
+    return sym_lookup(d, name, name_len) ? SYM_OK : SYM_NOT_FOUND;
 }
 
 /* LIFECYCLE */
@@ -470,22 +377,14 @@ void symbol_init(void) {
     if (d->arena == NULL) PANIC("symbol: cannot allocate arena");
     d->arena_size = SYMBOL_ARENA_SIZE;
 
-    d->arena_used = 0;
-    d->free_count = 0;
-    d->count = 0;
-
     g_sym = d;
-    klog_serv("Symbols: Local storage entries=%u, arena=%u\n",
-         SYMBOL_MAX_ENTRIES, SYMBOL_ARENA_SIZE);
+    klog_serv("Symbols: entries=%u, arena=%u\n",
+              SYMBOL_MAX_ENTRIES, SYMBOL_ARENA_SIZE);
 }
 
 void symbol_destroy(void) {
     struct symbol_device *d = g_sym;
     if (d == NULL) return;
-    for (size_t i = 0; i < d->capacity; i++) {
-        struct symbol_entry *s = &d->entries[i];
-        if (s->live) kfree(s->key);
-    }
     kfree(d->arena);
     kfree(d->entries);
     kfree(d);

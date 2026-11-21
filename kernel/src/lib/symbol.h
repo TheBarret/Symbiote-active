@@ -5,9 +5,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* codebase: 0.2.0 */
+/* codebase: 0.3.0 (flat names) */
 
-/* Symbol store bounded, fixed-capacity table of (namespace, name) -> typed value. */
+/* Symbol store: bounded, fixed-capacity table of name -> typed value.
+ *
+ * Names are flat. Structure, if wanted, is a naming convention ("net.ip"),
+ * not something the store knows about.
+ */
 
 /*  Mask layout
  *
@@ -67,7 +71,7 @@ static inline uint32_t symbol_mask_build(uint8_t owner, uint8_t type, uint32_t f
 }
 static inline uint8_t  symbol_mask_owner(uint32_t m) { return (uint8_t)((m & SYMBOL_OWNER_MASK) >> SYMBOL_OWNER_SHIFT); }
 static inline uint8_t  symbol_mask_type (uint32_t m) { return (uint8_t)((m & SYMBOL_TYPE_MASK)  >> SYMBOL_TYPE_SHIFT);  }
-/* shifted to 0..3 */
+/* shifted to 0..15 */
 static inline uint8_t  symbol_mask_flags(uint32_t m) { return (uint8_t)((m & SYMBOL_FLAG_MASK)  >> SYMBOL_FLAG_SHIFT);  }
 static inline uint16_t symbol_mask_priv (uint32_t m) { return (uint16_t)((m & SYMBOL_PRIV_MASK)  >> SYMBOL_PRIV_SHIFT);  }
 static inline bool symbol_mask_has(uint32_t m, uint32_t flag) { return (m & flag) == flag; }
@@ -78,7 +82,7 @@ enum symbol_result {
     SYM_OK               =  0,
     SYM_NOT_FOUND        = -1,
     SYM_READONLY         = -2,
-    SYM_NO_SPACE         = -4,   /* arena, slot table, or free-range table exhausted */
+    SYM_NO_SPACE         = -4,   /* arena or slot table exhausted */
     SYM_INVALID_ARGS     = -5,
     SYM_NO_DEVICE        = -6,
     SYM_INTERNAL         = -7,
@@ -97,46 +101,39 @@ enum symbol_result {
  *   CHAR/INT16/UINT16  2
  *   INT32/UINT32/FLOAT 4
  *   STRING             variable (bounded by SYMBOL_STRING_MAX, includes NUL)
- *   Handles            occupy 0 arena bytes.
  *
  * Allocation: first-fit over a sorted, coalescing free-range list, with
- * bump allocation from the high-water mark as the fallback. No wrap, no
- * overwrite of live data. Exhaustion fails the write: all-or-nothing,
- * nothing evicted on failure.
+ * bump allocation from the high-water mark as the fallback. Releasing the
+ * topmost range lowers the high-water mark again. Exhaustion fails the write:
+ * all-or-nothing, nothing evicted on failure.
  */
 
 /* Memory footprint */
-#define SYMBOL_STRING_MAX   256u           /* max STRING payload incl. NUL */
-#define SYMBOL_ARENA_SIZE   (64u * 1024u)  /* total arena bytes */
-#define SYMBOL_MAX_ENTRIES  256u           /* slot table capacity */
-#define SYMBOL_NAME_MAX     64u            /* max ns and name length (bytes, excl. NUL) */
-#define SYMBOL_FREE_RANGES_MAX 64u         /* max tracked free ranges; overflow => SYM_NO_SPACE */
+#define SYMBOL_STRING_MAX      256u           /* max STRING payload incl. NUL */
+#define SYMBOL_ARENA_SIZE      (64u * 1024u)  /* total arena bytes */
+#define SYMBOL_MAX_ENTRIES     256u           /* slot table capacity */
+#define SYMBOL_NAME_MAX        64u            /* max name length (bytes, excl. NUL) */
+#define SYMBOL_FREE_RANGES_MAX 64u            /* max tracked free ranges */
 
 /*  Entry
  *
- * Keys (ns/name) live in one block per entry (single kmalloc: ns\0name\0),
- * sliced by pointers. Value lives in the arena, referenced by offset.
+ * The name is stored inline, so an entry costs no heap allocation.
+ * The value lives in the arena, referenced by offset.
  */
 struct symbol_entry {
-    char     *key;        /* BLOCK BASE: ns and name are slices of ONE allocation; kfree(key) frees both */
-    char     *ns;         /* points inside key */
-    char     *name;       /* points inside key */
-    uint32_t  ns_len;
-    uint32_t  name_len;
+    char     name[SYMBOL_NAME_MAX + 1];
+    uint32_t name_len;
 
-    uint32_t  value_off;  /* offset into arena */
-    uint32_t  value_len;  /* payload bytes as stored; for STRING, includes the NUL */
+    uint32_t value_off;  /* offset into arena */
+    uint32_t value_len;  /* payload bytes as stored; for STRING, includes the NUL */
 
-    uint32_t  mask;       /* OWNER | TYPE | FLAGS | PRIVATE */
-    bool      live;
+    uint32_t mask;       /* OWNER | TYPE | FLAGS | PRIVATE */
+    bool     live;
 };
 
 /*  Public API
  *
- * TODO: accessor form
- * The functions below are the operations the store must offer;
- * HOW callers reach them (direct, handle, vtable-pointer) is still open.
- * Signatures shown as free functions for drafting only.
+ * `name` must be a NUL-terminated string of 1..SYMBOL_NAME_MAX bytes.
  */
 
 void symbol_init(void);
@@ -153,22 +150,21 @@ void symbol_destroy(void);
  * WRITE-ONCE for SYM_FLAG_READONLY entries: first set may proceed,
  * later overwrite returns SYM_READONLY (unset still allowed).
  */
-int symbol_set(const char *ns, const char *name, const void *value, size_t len, uint32_t mask);
+int symbol_set(const char *name, const void *value, size_t len, uint32_t mask);
 
 /* Read a typed value into a caller buffer.
  * Copies exactly value_len bytes; no implicit NUL is appended.
  * A STRING value includes its own NUL (set required it), so it is self-terminating.
  * On SYM_BUFFER_TOO_SMALL, *len_out holds the needed length.
  */
-int symbol_get(const char *ns, const char *name, void *buf, size_t buf_max, size_t *len_out);
+int symbol_get(const char *name, void *buf, size_t buf_max, size_t *len_out);
 
 /* (Nuclear) Remove: returns its arena range to the pool.
  * Not gated by flags (READONLY/SYSTEM), no caller tracing.
  */
-int symbol_unset(const char *ns, const char *name);
+int symbol_unset(const char *name);
 
-/* Existence / metadata. */
-int symbol_is_exist(const char *ns, const char *name);
+/* Existence. */
+int symbol_is_exist(const char *name);
 
-
-#endif /* CORE_SYMBOL_H */
+#endif /* CORE_LIB_SYMBOL_H */
