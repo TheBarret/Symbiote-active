@@ -50,7 +50,7 @@ static void klog_emit(const char *tag, const char *fmt, va_list ap) {
         /* Fixed 14-char column + 1 separator space */
         kprintf("%-14.14s ", stamp);
     } else {
-        kprintf("[◙] ");
+        kprintf("║◙║");
     }
 
     kprintf("%s ", tag);

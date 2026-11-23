@@ -71,13 +71,16 @@
 /* Klog settings
  * Ref: src/core/klog.h
  */
-#define SYM_TSC_ENABLED     false    // padding + tsc_ticks at klog_emit
-#define SYM_TAG             "\x1b[1;35;7m[KERN]\x1b[0m"
-#define SYM_TAG_EXT         "\x1b[1;36;7m[EXT]\x1b[0m"
-#define SYM_TAG_SERV        "\x1b[1;30;7m[SERVICE]\x1b[0m"
-#define SYM_TAG_INFO        "\x1b[1;34;7m[INFO]\x1b[0m"
-#define SYM_TAG_WARNING     "\x1b[1;33;7m[WARNING]\x1b[0m"
-#define SYM_TAG_ERROR       "\x1b[1;31;7m[ERROR]\x1b[0m"
+#define SYM_TSC_ENABLED     false    // column ticks (TSC enabled)
+#define SYM_TAG_EMPTY       "║◙║"    // column char (TSC disbaled)
+
+/* kernel message types */
+#define SYM_TAG             "\x1b[0;95m[ KERN ]\x1b[0m"     // Bright Magenta
+#define SYM_TAG_EXT         "\x1b[0;94m[ EXT  ]\x1b[0m"     // Bright Blue
+#define SYM_TAG_SERV        "\x1b[0;96m[ BUS  ]\x1b[0m"     // Bright Cyan
+#define SYM_TAG_INFO        "\x1b[0;37m[ INFO ]\x1b[0m"     // Standard White
+#define SYM_TAG_WARNING     "\x1b[1;33;7m[ WARN ]\x1b[0m"   // Amber/Yellow inverted, bold
+#define SYM_TAG_ERROR       "\x1b[1;91;7m[ ERR  ]\x1b[0m"   // Bright Red inverted, bold
 
 /* fbcon settings
  * Ref: src/ext/fbcon/fbcon.h
@@ -123,11 +126,14 @@ enum ext_prio {
 #define ADDR_CLASS_SHIFT  12
 #define ADDR_VALUE_MASK   0x0FFFu
 
-/* Bus functions */
+/* Router functions */
 #define NOBODY      0u      /* void(0) */
-#define BUS_PRINT   0x00F1u /* print(<string>) */
-#define BUS_PRINTN  0x00F3u /* print(<1/2/4-byte>) */
-#define BUS_RND     0x00F4u /* uint16_t = next_rnd() */
+#define BUS_PRINT   0x00F1u /* print(<data>) */
+#define BUS_RND     0x00F2u /* uint16_t = next_rnd() */
+#define BUS_SLEEP   0x00F3u /* kernel.sleep() */
+#define BUS_CLEAR   0x00F4u /* Clear screen */
+#define BUS_KILL    0x00F5u /* stops kernels, hangs forever */
+
 
 /* Fail at build */
 _Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "config.h: PMM_PAGE_SIZE must be a power of two");
@@ -137,4 +143,5 @@ _Static_assert(HEAP_ALIGN >= 8,                              "config.h: HEAP_ALI
 _Static_assert(HEAP_MIN_BLOCK_SIZE == HEAP_ALIGN,            "config.h: HEAP_MIN_BLOCK_SIZE must equal HEAP_ALIGN");
 _Static_assert(PMM_PAGE_SIZE == VMM_PAGE_SIZE,               "config.h: PMM and VMM must agree on page size");
 _Static_assert(TIMER_MAX_TASKS > 0,                          "config.h: TIMER_MAX_TASKS must be positive");
+_Static_assert(ROUTER_MAX_DEPTH > 0 && ROUTER_MAX_DEPTH <= 255,"config.h: ROUTER_MAX_DEPTH invalid range (uint8_t = 0-255)");
 #endif
