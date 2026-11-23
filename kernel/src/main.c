@@ -20,21 +20,34 @@
 #include <core/dev/timer.h>     // Clock controller
 /* kernel services */
 #include <core/services/loop.h> // shell loop manager
+#include <core/services/addr.h>
+#include <core/services/decoder.h>
 #include <core/services/router.h>
-#include <core/services/vsink.h>
 #include <core/services/io.h>
 #include <core/services/rnd.h>
-#include <core/services/greeter.h>
+#include <core/services/toolkit.h>
 /* kernel modules */
 #include <core/kprintf.h>   // Formatted output to every console
 #include <core/klog.h>      // Kernel logger extension (kern, info, warn, error)
 #include <core/ext.h>       // Extension-module dispatcher
 #include <core/cmd.h>       // Command-line dispatcher
-#include <core/shell.h>     // Shell Manager (ref: cmd.h)
+#include <core/panic.h>     // Panic handlers
+#include <core/shell.h>     // Shell Manager/dispathcer
+
+
+/* ascii greeter */
+static const char t_ascii[] =
+        "┌◙───────────────────────────────────────────────────────────────────────────────┐\n"
+        "│◙      ___             _     _       _                                          │\n"
+        "│◙     / __|_  _ _ __  | |__ (_) ___ | |_  ___                                   │\n"
+        "│◙     \\__ \\ || | '  \\ | '_ \\| |/ _ \\|  _|/ -_)                                  │\n"
+        "│◙     |___/\\_, |_|_|_||_.__/|_|\\___/ \\__|\\___|OS                                │\n"
+        "│◙           |__/x86-64                                                          │\n"
+        "└◙───────────────────────────────────────────────────────────────────────────────┘\n"
+        "\nType 'help' for a list of command.\n";
 
 
 /* Loop.h back-end */
-
 static uint32_t run_drain(void *ctx, uint32_t budget) {
     (void)ctx; (void)budget;
     timer_drain();
@@ -62,13 +75,23 @@ static bool machine_can_run(void) {
     return true;
 }
 
+static bool machine_welcome(bool bootlog) {
+    bool r_val = true;
+    if (!bootlog) {
+        r_val = router_send(router_create_p(ADDR_UNICAST(NOBODY), ADDR_UNICAST(BUS_CLEAR), FRAME_SIGNAL, 1, NULL, 0));
+    }
+    r_val = router_send(router_create_p(ADDR_UNICAST(NOBODY), ADDR_UNICAST(BUS_PRINT), FRAME_DATA, 0,
+                                        (const uint8_t *)t_ascii, (uint16_t)(sizeof(t_ascii) - 1u)));
+    return r_val;
+}
+
 /* boot->kmain() entrypoint */
 void kmain(void) {
     // Stage 1 ---------------------------------------------------------------------------
     // Limine validation logic or hang forever
     if (!boot_protocol_ok()) { cpu_halt_forever(); }
     /* essentials */
-    klog_init();                // kernel format logger
+    klog_init(SYM_TSC_ENABLED);  // kernel format logger
     /* greeter */
     klog_info("Loading kernel: %s %s-%s...\n", SYM_BOOTNAME, SYM_VERSION, SYM_VERSION_INFO);
     /* kernel modules start */
@@ -81,33 +104,31 @@ void kmain(void) {
     timer_init(TIMER_HZ);       // interrupts
     cpu_sti();                  // interrupts
     serial_init();              // serial sink
+    vfs_init();                 // filesystem storage
     // Stage 2 ---------------------------------------------------------------------------
     if (!kbd_init()) {          // need keyboard
         klog_error("no PS/2 keyboard detected, halting...\n");
         cpu_halt_forever();     // no keyboard, halt.
     }
-    vfs_init();                 // filesystem storage
-    /* services */
-    router_init();              // environment
-    init_vsink(ADDR_NOBODY);
-    init_io(ADDR_UNICAST(1), ADDR_UNICAST(2));
-    init_rnd(ADDR_UNICAST(3));
-    init_header();
+    /* kernel bus & routing */
+    /* endpoint table see: config.h */
+    router_init();
+    init_rnd    (ADDR_UNICAST(BUS_RND));
+    init_io     (ADDR_UNICAST(BUS_PRINT));
+    init_toolkit(ADDR_UNICAST(BUS_CLEAR),
+                 ADDR_UNICAST(BUS_KILL),
+                 ADDR_UNICAST(BUS_SLEEP));
 
-    /* kernel modules end */
-    klog_info("Stage 1 → Stage 2\n");
-    /* stage two: extensions */
+    /* kernel services end */
     ext_init_all();             // extensions
     cmd_selfcheck();            /* commence self-test after ext-registration */
+    klog_info("Loading complete, ext=%zu, commands=%zu\n", ext_count(), cmd_count());
     // Stage 3 ---------------------------------------------------------------------------
-    /* greeter */
-    klog_info("Stage 2 complete (ext: %zu, sys: %zu)\n", ext_count(), cmd_count());
-    shell_init();               // init shell dispatcher
-    kprintf("\nType 'help' for a list of command.\n");
-
+    shell_init();               // init shell dispatcher, greeters
+    machine_welcome(true);
     if (!machine_can_run()) {
-            klog_error("task registration failed, halting...\n");
-            cpu_halt_forever();
+            PANIC("kmain() loop.c not initialized");
+            //cpu_halt_forever();
         }
     loop_run(cpu_sti_hlt);      /* noreturn */
 }
