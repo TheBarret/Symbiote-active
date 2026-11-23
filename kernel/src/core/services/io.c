@@ -6,7 +6,7 @@
 #include <core/services/decoder.h>
 #include <core/services/router.h>
 
-/* console sink: payload as raw */
+/* console sink */
 static void io_console(router_frame *pkt) {
     if (!pkt) return;
 
@@ -82,7 +82,6 @@ static void io_demux(router_frame *pkt) {
     default: break;
     }
 }
-/* connects console sink, send visual greeter for confirmation */
 void init_io(router_address id) {
     router_register("print", id, io_demux);
 }
