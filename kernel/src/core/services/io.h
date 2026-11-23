@@ -3,6 +3,6 @@
 
 #include <core/services/router.h>
 
-void init_io(router_address id1, router_address id2);
+void init_io(router_address id);
 
 #endif

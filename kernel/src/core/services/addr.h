@@ -5,14 +5,17 @@
 #include <stdbool.h>
 #include <core/version.h>
 
-/* Router address Object : 4-bit class + 12-bit value
+/* codebase: 0.2.0 */
+
+/* Router address object : 4-bit class + 12-bit value
  *
- * Address      Function
+ * Class        Function
  * --------------------------------------------------------
- * unicast	    fixed endpoints, mostly hardware-shaped
- * anycast	    replaceable services, found by service id
- * multicast	event streams, with subscribers
- * port	        service descriptor within a device
+ * unicast      fixed endpoints, mostly hardware-shaped
+ * multicast    event streams, with subscribers
+ * broadcast    every registered endpoint
+ * anycast      replaceable services, found by service id
+ * protected    interior bus space, reserved
  *
  * Layout:
  * 15      12 11                          0
@@ -20,44 +23,49 @@
  * |  CLASS  |          VALUE            |
  * +---------+---------------------------+
  *
- * A mask-based addressing algorithm for routing endpoints and messages.
+ * A mask-based addressing scheme for routing endpoints and messages.
+ * Ports are not part of the address: they live in router_frame.port.
+ *
+ * ADDR_CLASS_SHIFT, ADDR_VALUE_MASK and NOBODY are provided by config.h.
  */
-
-/* moved to config.h */
-//#define ADDR_CLASS_SHIFT  12
-//#define ADDR_VALUE_MASK   0x0FFFu
-
 
 /* address atom type */
 typedef uint16_t router_address;
 
-/* address class
- *  4-bit class in bits 15..12, 12-bit value in bits 11..0):
+/* address class (4-bit class in bits 15..12, 12-bit value in bits 11..0)
  *
  * - UNICAST (0x0):
- *   value = endpoint ID; used for endpoint identities
- *   (and sources, including ADDR_NOBODY = 0x0000), exact single-endpoint match on dispatch.
+ *   value = endpoint ID; used for endpoint identities and sources
+ *   (including ADDR_NOBODY = 0x0000); exact single-endpoint match on dispatch.
  *
  * - MULTICAST (0x1):
  *   value = group ID (0..15); destination only, never an endpoint identity.
- *   Dispatches to all registered endpoints subscribed to that group bit.
+ *   Dispatches to all endpoints subscribed to that group bit.
  *
  * - BROADCAST (0x2):
- *   value = 0; destination only, targets all currently registered endpoints regardless of multicast membership.
+ *   value = 0; destination only, targets all registered endpoints
+ *   regardless of multicast membership.
  *
  * - ANYCAST (0x3):
- *   value = service ID; destination only (not yet routed), intended to resolve to a single provider for that service.
+ *   value = service ID; destination only, resolves to a single provider
+ *   of that service (the most recently registered one).
  *
  * - PROTECTED (0x4..0xF):
- *   protected and privileged address space; not valid as normal endpoint identities or unprivileged targets.
+ *   protected and privileged address space; not valid as endpoint identity
+ *   or unprivileged target. Currently rejected as a destination.
  */
 enum addr_class {
     ADDR_CLASS_UNICAST   = 0x0,
     ADDR_CLASS_MULTICAST = 0x1,
     ADDR_CLASS_BROADCAST = 0x2,
     ADDR_CLASS_ANYCAST   = 0x3,
-    ADDR_CLASS_PROTECTED = 0x4, /* 0x4..0xF purpose: clean separation from UNICAST ID space. */
+    ADDR_CLASS_PROTECTED = 0x4, /* 0x4..0xF, kept apart from the UNICAST ID space */
 };
+
+_Static_assert(ADDR_CLASS_SHIFT + 4 == 16,
+               "addr.h: class field must fill the top 4 bits of router_address");
+_Static_assert(ADDR_VALUE_MASK == (1u << ADDR_CLASS_SHIFT) - 1u,
+               "addr.h: ADDR_VALUE_MASK must cover exactly the bits below the class field");
 
 /* constructors */
 #define ADDR_MAKE(cls, val) \
@@ -68,9 +76,9 @@ enum addr_class {
 #define ADDR_ANYCAST(v)    ADDR_MAKE(ADDR_CLASS_ANYCAST,   (v))
 
 /* reserved singletons */
-#define ADDR_NOBODY        ADDR_UNICAST(NOBODY)                      /* 0x0000: source stays anonymous */
-#define ADDR_BROADCAST     ADDR_MAKE(ADDR_CLASS_BROADCAST, 0)   /* 0x2000: targets everyone */
-#define ADDR_ANY           ADDR_BROADCAST                       /* alias */
+#define ADDR_NOBODY        ADDR_UNICAST(NOBODY)             /* 0x0000: source stays anonymous */
+#define ADDR_BROADCAST     ADDR_MAKE(ADDR_CLASS_BROADCAST, 0) /* 0x2000: targets everyone */
+#define ADDR_ANY           ADDR_BROADCAST                   /* alias */
 
 /* accessors */
 static inline uint8_t  addr_class(router_address a) { return (uint8_t)(a >> ADDR_CLASS_SHIFT); }
@@ -80,5 +88,6 @@ static inline bool addr_is_unicast  (router_address a) { return addr_class(a) ==
 static inline bool addr_is_multicast(router_address a) { return addr_class(a) == ADDR_CLASS_MULTICAST; }
 static inline bool addr_is_broadcast(router_address a) { return addr_class(a) == ADDR_CLASS_BROADCAST; }
 static inline bool addr_is_anycast  (router_address a) { return addr_class(a) == ADDR_CLASS_ANYCAST;   }
+static inline bool addr_is_protected(router_address a) { return addr_class(a) >= ADDR_CLASS_PROTECTED; }
 
-#endif /* CORE_ARCH_ADDR_H */
+#endif /* CORE_SERVICES_ADDR_H */

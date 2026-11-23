@@ -27,53 +27,57 @@
  *
  * changelog rev: 0.2
  * - Depth guard:
- *  `router_send` now counts its nesting and drops the frame once it reaches `ROUTER_MAX_DEPTH`,
- *   which is 8 unless you override it in `config.h`.
- *   A reply cycle like A→B→A is cut off with a warning, and the frame is still freed.
+ *  `router_send` counts its nesting and drops the frame once it reaches `ROUTER_MAX_DEPTH`
+ *   (8 unless overridden in `config.h`). A reply cycle like A->B->A is cut off
+ *   with a warning, and the frame is still freed.
  * - Frame validation:
- *   a handler trusts `pkt->length`, so `router_send` now drops any frame with an out-of-range length or an invalid type before dispatch.
- *   Frames from `router_create` always pass. The check only catches frames built by hand.
+ *   `router_send` drops any frame with an out-of-range length, invalid type or
+ *   invalid destination before dispatch. Frames from `router_create` always pass;
+ *   the check only catches frames built by hand.
  * - Unicast-only registration:
- *   `router_register` now rejects any `id` that isn't a unicast address. Before,
- *   a device could register with a broadcast or multicast address as its identity.
+ *   `router_register` rejects any `id` that isn't a unicast address.
  * - Safe re-init:
- *   `router_init` refuses to run while a dispatch is in progress, because it would free the device list the dispatch loop is walking.
+ *   `router_init` refuses to run while a dispatch is in progress.
  * - Reserved classes:
- *   frames addressed to a reserved class return early instead of scanning every device.
- * - NULL name bug:
- *   `register_sink` passed a possibly-NULL name straight to the log format. It now uses `name_or_default`.
- *
+ *   frames addressed to a reserved class are dropped instead of scanning every device.
+ * - NULL name:
+ *   names are passed through `name_or_default` before logging.
+ * - `router_frame.type` is a fixed-width `uint8_t` (was the enum, whose size is
+ *   implementation-defined). `router_ptypes` still names the values.
+ * - Frame layout is pinned by a static assert.
  */
 
 /* transport class */
 typedef enum {
-    FRAME_SIGNAL      = 0, /* signal */
-    FRAME_DATA        = 1, /* raw */
-    FRAME_ENVELOPE    = 2, /* structured */
-    FRAME_EMPTY       = 3, /* debug */
+    FRAME_SIGNAL      = 0, /* control   : signal frames */
+    FRAME_DATA        = 1, /* transport : data unstructured */
+    FRAME_STRUCT      = 2  /* transport : data structured */
 } router_ptypes;
 
 /* transport packet frame */
 typedef struct {
-    uint64_t        sentinel; /* router->g_success accumulator, unique, wraps */
+    uint64_t        sentinel; /* router->g_success accumulator, wraps */
     router_address  src_addr; /* source address */
     router_address  dst_addr; /* destination address */
-    router_ptypes       type; /* transport class */
+    uint8_t             type; /* transport class, a router_ptypes value */
     uint16_t            port; /* local port, 0 is default */
     uint16_t          length; /* bytes in payload */
     uint8_t        payload[]; /* buffer array member */
 } __attribute__((packed)) router_frame;
 
-/* transport callback signature: frame is owned by the router, must not be retained */
+_Static_assert(offsetof(router_frame, payload) == 17, "router_frame layout changed");
+
+/* transport callback signature: frame is owned by the router, must not be retained or modified */
 typedef void (*router_rx_callback_t)(router_frame *pkt);
 
 typedef struct router_device {
-    const char                *name; /* string name */
+    const char                *name; /* string name, stored by pointer */
     router_address               id; /* unicast address, assigned at register */
     uint16_t           mcast_groups; /* bit N = member of group N (0..15) */
     uint16_t             service_id; /* anycast service ID, 0 = none, 1..0xFFF service descriptor */
     router_rx_callback_t rx_handler; /* called on dispatch */
     struct router_device      *next; /* list linkage */
+    uint32_t                  index; /* router_register() accumulator */
 } router_device;
 
 /* transport router API */
@@ -88,13 +92,12 @@ bool router_leave_mcast(router_address id, uint8_t group);
 bool router_send(router_frame *pkt);
 
 /* transport build: caller owns until passed to router_send. */
-/* legacy */
 router_frame *router_create(router_address src_addr, router_address dst_addr,
                             router_ptypes ptype, const uint8_t *payload, uint16_t payload_len);
 /* with port */
 router_frame *router_create_p(router_address src_addr, router_address dst_addr,
-                            router_ptypes ptype, uint16_t port,
-                            const uint8_t *payload, uint16_t payload_len);
+                              router_ptypes ptype, uint16_t port,
+                              const uint8_t *payload, uint16_t payload_len);
 
 /* transport anycast service binder */
 bool router_bind_service(router_address id, uint16_t service_id);
@@ -107,5 +110,6 @@ void router_perform_test(router_address id);
 
 /* stats */
 void router_stats(void);
+void router_inspect_frame(const router_frame *pkt);
 
 #endif /* CORE_SERVICES_ROUTER_H */
