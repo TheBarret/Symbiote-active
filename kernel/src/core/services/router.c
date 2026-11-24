@@ -40,7 +40,6 @@ static void router_reset_metrics(void) {
 }
 
 static router_device *find_device(router_address id) {
-    klog_serv("locating %u...\n", (unsigned)id);
     for (router_device *d = device_head; d; d = d->next) {
         if (d->id == id) return d;
     }
@@ -99,7 +98,6 @@ void router_inspect_frame(const router_frame *pkt) {
     kprintf("length    : %u, sentinel : %llu\n", (unsigned)pkt->length,
             (unsigned long long)pkt->sentinel);
     if (pkt->type == FRAME_STRUCT) {
-        kprintf("Packed    : yes\n");
         kprintf("Decoder   : %s\n",
                 frame_check(pkt->payload, pkt->length) == DECODER_OK ? "accepted" : "rejected");
     }
@@ -253,7 +251,6 @@ bool router_leave_mcast(router_address id, uint8_t group) {
 static bool router_dispatch(router_frame *pkt) {
     const router_address dst = pkt->dst_addr;
     router_device *dev;
-    klog_serv("routing %u...\n", (unsigned)dst);
     if (addr_is_unicast(dst)) {
         /* fast path: exact match, single dispatch */
         dev = find_device(dst);
@@ -347,10 +344,12 @@ static void init_vsink(void) { register_sink("void", ADDR_NOBODY, route_to_void)
 /* Broadcast test
  * Exercises the cast path via ADDR_BROADCAST, passes only if at least one endpoint is registered.
  */
-void router_perform_test(router_address id) {
-    klog_serv("Router: sending broadcast test");
+bool router_perform_test(router_address id) {
+    klog_serv("sending broadcast");
     router_frame *bc = router_create_p(id, ADDR_BROADCAST, FRAME_SIGNAL, 0, NULL, 0);
-    kprintf(router_send(bc) ? "...[OK]\n" : "...[FAILED]\n");
+    bool r_val = router_send(bc);
+    kprintf(r_val ? "...[OK]\n" : "...[FAILED]\n");
+    return r_val;
 }
 
 /* initializer: frees every device, refuses while a dispatch is in progress,

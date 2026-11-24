@@ -3,6 +3,6 @@
 
 #include <core/services/router.h>
 
-void init_toolkit(router_address id1, router_address id2, router_address id3);
+void router_register_defaults();
 
 #endif

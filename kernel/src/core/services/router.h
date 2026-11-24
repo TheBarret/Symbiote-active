@@ -106,7 +106,7 @@ bool router_bind_service(router_address id, uint16_t service_id);
 bool router_isaddr(const router_device *dev, router_address dst);
 
 /* selftesters */
-void router_perform_test(router_address id);
+bool router_perform_test(router_address id);
 
 /* stats */
 void router_stats(void);
