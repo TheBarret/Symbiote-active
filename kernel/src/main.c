@@ -2,6 +2,9 @@
 #include <stdint.h>
 
 /* kernel core */
+#include <lib/string.h>             /* core libraries */
+#include <lib/mem.h>
+#include <lib/random.h>
 #include <core/version.h>           // Master version, includes master config.h
 #include <core/arch/boot.h>         // Limine API vectors and helpers
 #include <core/arch/cpu.h>          // CPU tables, CPUID, TSC-clock
@@ -21,10 +24,7 @@
 /* kernel services */
 #include <core/services/loop.h> // shell loop manager
 #include <core/services/addr.h>
-#include <core/services/decoder.h>
 #include <core/services/router.h>
-#include <core/services/io.h>
-#include <core/services/rnd.h>
 #include <core/services/toolkit.h>
 /* kernel modules */
 #include <core/kprintf.h>   // Formatted output to every console
@@ -75,14 +75,21 @@ static bool machine_can_run(void) {
     return true;
 }
 
+static bool machine_clean(void) {
+    return router_send(router_create_p(ADDR_UNICAST(NOBODY), ADDR_UNICAST(BUS_CLEAR),
+                                       FRAME_SIGNAL, DEFAULT_PORT,
+                                       NULL, 0));
+}
+
 static bool machine_welcome(bool bootlog) {
-    bool r_val = true;
-    if (!bootlog) {
-        r_val = router_send(router_create_p(ADDR_UNICAST(NOBODY), ADDR_UNICAST(BUS_CLEAR), FRAME_SIGNAL, 1, NULL, 0));
+    bool r_valid = true;
+    if (!bootlog) { r_valid = machine_clean(); }
+    if (r_valid) {
+        return router_send(router_create_p(ADDR_UNICAST(NOBODY), ADDR_UNICAST(BUS_PRINT),
+                                           FRAME_DATA, DEFAULT_PORT,
+                                           (const uint8_t *)t_ascii, (uint16_t)(sizeof(t_ascii) - 1u)));
     }
-    r_val = router_send(router_create_p(ADDR_UNICAST(NOBODY), ADDR_UNICAST(BUS_PRINT), FRAME_DATA, 0,
-                                        (const uint8_t *)t_ascii, (uint16_t)(sizeof(t_ascii) - 1u)));
-    return r_val;
+    return r_valid;
 }
 
 /* boot->kmain() entrypoint */
@@ -112,13 +119,12 @@ void kmain(void) {
     }
     /* kernel bus & routing */
     /* endpoint table see: config.h */
+    rnd_init(RND_SEED); /* ctor for lib/random.h */
     router_init();
-    init_rnd    (ADDR_UNICAST(BUS_RND));
-    init_io     (ADDR_UNICAST(BUS_PRINT));
-    init_toolkit(ADDR_UNICAST(BUS_CLEAR),
-                 ADDR_UNICAST(BUS_KILL),
-                 ADDR_UNICAST(BUS_SLEEP));
-
+    router_register_defaults();
+    if (!router_perform_test(ADDR_UNICAST(NOBODY))) {
+        PANIC("kmain() router.c not initialized");
+    }
     /* kernel services end */
     ext_init_all();             // extensions
     cmd_selfcheck();            /* commence self-test after ext-registration */
