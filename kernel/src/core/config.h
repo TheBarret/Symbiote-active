@@ -133,6 +133,7 @@ enum ext_prio {
 #define BUS_SLEEP   0x00F3u /* kernel.sleep() */
 #define BUS_CLEAR   0x00F4u /* Clear screen */
 #define BUS_KILL    0x00F5u /* stops kernels, hangs forever */
+#define DEFAULT_PORT     1u /* reply port = 1, broadcast port 0 */
 
 
 /* Fail at build */
