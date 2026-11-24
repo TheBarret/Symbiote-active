@@ -74,7 +74,7 @@
  * Ref: src/core/klog.h
  */
 #define SYM_TSC_ENABLED     false    // column ticks (TSC enabled)
-#define SYM_TAG_EMPTY       "║◙║"    // column char (TSC disbaled)
+#define SYM_TAG_EMPTY       "║◙║"    // column char (TSC disbaled, fallback)
 
 /* kernel message types */
 #define SYM_TAG             "\x1b[0;95m[ KERN ]\x1b[0m"     // Bright Magenta
@@ -118,7 +118,7 @@ enum ext_prio {
 /* Router settings
  * Ref: src/core/services/router.h
  */
-#define ROUTER_SIZE_MAX     16384 /* hint: use LOG_SIZE (16kb) */
+#define ROUTER_SIZE_MAX     1024 /*  max buffer */
 #define ROUTER_MCAST_GROUPS 16u   /* Number of multicast groups; bounded by the width of router_device.mcast_groups. */
 #define ROUTER_MAX_DEPTH    8u    /* Maximum nesting of router_send, stops reply cycles (A -> B -> A) */
 
@@ -131,11 +131,15 @@ enum ext_prio {
 /* Router functions */
 #define NOBODY      0u      /* void(0) */
 #define BUS_PRINT   0x00F1u /* print(<data>) */
-#define BUS_RND     0x00F2u /* uint16_t = next_rnd() */
+#define BUS_RND     0x00F2u /* uint16_t = random.h->next_rnd() */
 #define BUS_SLEEP   0x00F3u /* kernel.sleep() */
 #define BUS_CLEAR   0x00F4u /* Clear screen */
-#define BUS_KILL    0x00F5u /* stops kernels, hangs forever */
-#define DEFAULT_PORT     1u /* reply port = 1, broadcast port 0 */
+#define BUS_KILL    0x00F5u /* stops kernel, hangs forever */
+#define BUS_TASKS   0x00F6u /* uint32_t = loop.h->loop_get_stats() */
+
+#define DEFAULT_BC       0u /* broadcast port = 0 */
+#define DEFAULT_PORT     1u /* reply port = 1 */
+
 
 
 /* Fail at build */
