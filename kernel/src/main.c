@@ -131,7 +131,7 @@ void kmain(void) {
     klog_info("Loading complete, ext=%zu, commands=%zu\n", ext_count(), cmd_count());
     // Stage 3 ---------------------------------------------------------------------------
     shell_init();               // init shell dispatcher, greeters
-    machine_welcome(true);
+    machine_welcome(SYM_SHOW_BOOTLOG);
     if (!machine_can_run()) {
             PANIC("kmain() loop.c not initialized");
             //cpu_halt_forever();
