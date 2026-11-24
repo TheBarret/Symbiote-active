@@ -14,7 +14,7 @@ That constraint is not an apology for incompleteness.
 It is the design method: implement a narrow interface, keep ownership obvious, avoid background machinery until it is needed, and make extensions opt-in.  
 “Small” means fewer mechanisms, not less thoughtful engineering.  
 
-<img width="1286" height="863" alt="Symbiote boot log" src="https://github.com/user-attachments/assets/8cf1e9a8-c0ae-41f8-98e7-d04481d01b27" />
+<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/47803f5f-4bb0-4198-88be-6e88c44a3ac3" />  
 
 <img width="336" height="223" alt="screenshots" src="https://github.com/user-attachments/assets/f5f978ec-0f23-42d9-8583-e4de052c2b50" />
 <img width="336" height="223" alt="screenshots" src="https://github.com/user-attachments/assets/1f9bd1b3-f0cf-4ac5-8bee-7c050d995026" />  
