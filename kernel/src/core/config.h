@@ -8,6 +8,8 @@
 /* codebase: 0.2.0 */
 /* incorrect settings can result in unpredictable behaviors!  */
 
+#define SYM_SHOW_BOOTLOG true /* bootlog toggle */
+
 /* Serial settings
  * Ref: src/core/serial.h
  */
