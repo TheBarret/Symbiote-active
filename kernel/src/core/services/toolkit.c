@@ -8,6 +8,7 @@
 #include <core/version.h>
 #include <core/kprintf.h>
 #include <core/klog.h>
+#include <core/services/loop.h>
 #include <core/services/addr.h>
 #include <core/services/router.h>
 #include <core/services/decoder.h>
@@ -40,7 +41,7 @@ static void randomizer_respond(router_frame *pkt) {
     uint16_t length;
     if (frame_encode(DTYPE_UINT16, 0, &value, sizeof value, payload, sizeof payload, &length) != DECODER_OK) return;
     router_frame *reply = router_create_p(ADDR_UNICAST(NOBODY), pkt->src_addr, FRAME_STRUCT, DEFAULT_PORT, payload, length);
-    if (!reply || !router_send(reply)) { klog_warning("randomizer failed, bad reply object\n"); }
+    if (!reply || !router_send(reply)) { klog_warning("router rejected frame\n"); }
 }
 
 static void randomizer_demux(router_frame *pkt) {
@@ -163,6 +164,34 @@ static void io_demux(router_frame *pkt) {
     }
 }
 
+/* loop manager */
+
+static void lp_reply(router_frame *pkt) {
+    if (!pkt || pkt->type != FRAME_SIGNAL) return;
+    uint16_t r_length;
+    struct loop_stats r_stats = loop_get_stats();
+    uint32_t r_value = r_stats.tasks;
+    uint8_t r_payload[DECODER_HEADER_SIZE + sizeof r_value];
+    /* cast type and validate */
+    if (frame_encode(DTYPE_UINT32, 0,
+                 &r_value, sizeof r_value,
+                 r_payload, sizeof r_payload, &r_length) != DECODER_OK) return;
+    /* cast frame */
+    router_frame *reply = router_create_p(ADDR_UNICAST(NOBODY), pkt->src_addr,
+                                          FRAME_STRUCT, DEFAULT_PORT,
+                                          r_payload, r_length);
+    /* hand off */
+    if (!reply || !router_send(reply)) { klog_warning("router rejected frame\n"); }
+}
+
+static void lp_demux(router_frame *pkt) {
+    if (!pkt) return;
+    switch (pkt->port) {
+    case DEFAULT_PORT: lp_reply(pkt);  break;
+    default: break;
+    }
+}
+
 /* init */
 void router_register_defaults() {
     router_register("print", ADDR_UNICAST(BUS_PRINT), io_demux);
@@ -170,4 +199,5 @@ void router_register_defaults() {
     router_register("sleep", ADDR_UNICAST(BUS_SLEEP), sleep_demux);
     router_register("cls",   ADDR_UNICAST(BUS_CLEAR), clear_demux);
     router_register("exit",  ADDR_UNICAST(BUS_KILL), shutdown_demux);
+    router_register("tasks",  ADDR_UNICAST(BUS_TASKS), lp_demux);
 }

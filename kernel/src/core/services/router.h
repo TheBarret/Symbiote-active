@@ -107,6 +107,7 @@ bool router_isaddr(const router_device *dev, router_address dst);
 
 /* selftesters */
 bool router_perform_test(router_address id);
+bool router_iftest(void);
 
 /* stats */
 void router_stats(void);

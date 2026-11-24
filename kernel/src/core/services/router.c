@@ -104,9 +104,7 @@ void router_inspect_frame(const router_frame *pkt) {
 }
 
 /* in-line broadcast tester */
-static bool router_iftest(void) {
-    return router_send(router_create_p(ADDR_NOBODY, ADDR_BROADCAST, FRAME_SIGNAL, 0, NULL, 0));
-}
+bool router_iftest(void) { return router_send(router_create_p(ADDR_UNICAST(NOBODY), ADDR_BROADCAST, FRAME_SIGNAL, DEFAULT_BC, NULL, 0)); }
 
 /* general stats */
 void router_stats(void) {
@@ -337,16 +335,16 @@ router_frame *router_create(router_address src_addr, router_address dst_addr,
     return router_create_p(src_addr, dst_addr, ptype, 0 /* 0 = default */, payload, payload_len);
 }
 
-/* built-in void sink */
+/* void, anonymous source */
 static void route_to_void(router_frame *pkt) { (void)pkt; g_voided++; }
-static void init_vsink(void) { register_sink("void", ADDR_NOBODY, route_to_void); }
+static void init_vsink(void) { register_sink("void", ADDR_UNICAST(NOBODY), route_to_void); }
 
 /* Broadcast test
  * Exercises the cast path via ADDR_BROADCAST, passes only if at least one endpoint is registered.
  */
 bool router_perform_test(router_address id) {
     klog_serv("sending broadcast");
-    router_frame *bc = router_create_p(id, ADDR_BROADCAST, FRAME_SIGNAL, 0, NULL, 0);
+    router_frame *bc = router_create_p(id, ADDR_BROADCAST, FRAME_SIGNAL, DEFAULT_BC, NULL, 0);
     bool r_val = router_send(bc);
     kprintf(r_val ? "...[OK]\n" : "...[FAILED]\n");
     return r_val;
