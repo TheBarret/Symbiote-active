@@ -4,6 +4,7 @@
 #include <core/arch/cpu.h>
 #include <core/dev/timer.h>
 #include <core/services/loop.h>
+#include <core/services/logger.h>
 
 static struct task *g_tasks[LOOP_MAX_TASKS];
 static uint32_t     g_count;

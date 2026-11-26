@@ -12,6 +12,7 @@
 #include <core/services/addr.h>
 #include <core/services/router.h>
 #include <core/services/decoder.h>
+#include <core/services/logger.h>
 
 /* clear screen */
 
@@ -87,12 +88,13 @@ static void sleep_demux(router_frame *pkt) {
     }
 }
 
-/* console sink */
+/* console */
+
+
 static void io_console(router_frame *pkt) {
     if (!pkt) return;
-
     if (pkt->type == FRAME_DATA) {
-        char buf[LOG_SIZE]; /* config.h */
+        char buf[ROUTER_SIZE_MAX]; /* config.h */
         size_t cap = sizeof(buf) - 1u;
         size_t len = pkt->length < cap ? pkt->length : cap;
         memcpy(buf, pkt->payload, len);

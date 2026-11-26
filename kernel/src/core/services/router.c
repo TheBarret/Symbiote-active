@@ -1,12 +1,14 @@
 #include <lib/mem.h>
 #include <lib/string.h>
-#include <core/arch/heap.h>
+#include <lib/random.h>
 #include <core/version.h>
+#include <core/arch/heap.h>
+#include <core/dev/vfs.h>
 #include <core/kprintf.h>
 #include <core/klog.h>
 #include <core/services/decoder.h>
 #include <core/services/router.h>
-
+#include <core/services/logger.h>
 /* Router concurrency contract:
  * the router is NOT interrupt-safe. The device list and the heap are unlocked,
  * so router_send() and friends must only be called from task context.
@@ -45,6 +47,7 @@ static router_device *find_device(router_address id) {
     }
     return NULL;
 }
+
 
 /* anycast: first match in list order, i.e. the most recently registered provider */
 static router_device *router_resolve_anycast(uint16_t service_id) {
@@ -163,14 +166,18 @@ bool router_register(const char *name, router_address id, router_rx_callback_t h
     if (!handler) return false;
 
     if (!addr_is_unicast(id)) {
-        klog_warning("router: endpoint must be unicast (address=0x%x, name=%s)\n",
-                     (unsigned)id, name_or_default(name));
+        //klog_warning("router: endpoint must be unicast (address=0x%x, name=%s)\n",
+        //    (unsigned)id, name_or_default(name));
+        log_write("    router_register() endpoint must be unicast (address=0x%04x, name=%s)\n",
+            (unsigned)id, name_or_default(name));
         return false;
     }
 
     if (find_device(id) != NULL) {
-        klog_warning("router: duplicate endpoint (address=0x%x, name=%s)\n",
-                     (unsigned)id, name_or_default(name));
+        //klog_warning("router: duplicate endpoint (address=0x%x, name=%s)\n",
+        //             (unsigned)id, name_or_default(name));
+        log_write("    router_register() duplicate endpoint %s at 0x%04x\n",
+            (unsigned)id, name_or_default(name));
         return false;
     }
 
@@ -178,6 +185,8 @@ bool router_register(const char *name, router_address id, router_rx_callback_t h
     if (!dev) return false;
 
     g_connected++; /* accumulate metric */
+
+    /* populate table */
     dev->name         = name_or_default(name);
     dev->id           = id;
     dev->mcast_groups = 0;
@@ -186,14 +195,19 @@ bool router_register(const char *name, router_address id, router_rx_callback_t h
     dev->next         = device_head;
     dev->index        = g_connected;
     device_head       = dev;
+
+    /* loggers */
     klog_serv("endpoint %s at 0x%04x\n", dev->name, (unsigned)id);
+    log_write("    router_register() endpoint %s at 0x%04x\n",
+        name_or_default(name), (unsigned)id);
     return true;
 }
 
 void register_sink(const char *name, router_address addr, router_rx_callback_t fn) {
     if (!router_register(name, addr, fn)) {
-        klog_warning("router: failed to register sink '%s' at 0x%x\n",
-                     name_or_default(name), (unsigned)addr);
+        log_write("    register_sink() endpoint %s at 0x%04x, failed\n",
+            name_or_default(name), (unsigned)addr);
+        return;
     }
 }
 
@@ -249,38 +263,41 @@ bool router_leave_mcast(router_address id, uint8_t group) {
 static bool router_dispatch(router_frame *pkt) {
     const router_address dst = pkt->dst_addr;
     router_device *dev;
+    log_write("       [%u] dst = 0x%04x\n", (unsigned)pkt->sentinel, (unsigned)pkt->dst_addr);
+    log_write("       [%u] src = 0x%04x\n", (unsigned)pkt->sentinel, (unsigned)pkt->src_addr);
     if (addr_is_unicast(dst)) {
-        /* fast path: exact match, single dispatch */
         dev = find_device(dst);
+        log_write("       [%u] type = unicast\n", (unsigned)pkt->sentinel);
     } else if (addr_is_anycast(dst)) {
         dev = router_resolve_anycast(addr_value(dst));
+        log_write("       [%u] type = anycast\n", (unsigned)pkt->sentinel);
     } else if (addr_is_protected(dst)) {
-        /* todo: reserved for interior bus traffic */
-        klog_warning("router_send() frame dropped (ADDR_CLASS_PROTECTED)\n");
-        router_inspect_frame(pkt);
+        log_write("       [%u] type = protected\n", (unsigned)pkt->sentinel);
         return false;
     } else {
-        /* cast path: dispatch to every matching device */
         bool delivered = false;
+        log_write("       [%u] type = broadcast (queued=%u)\n", (unsigned)pkt->sentinel, (unsigned)g_connected);
         for (router_device *d = device_head; d; d = d->next) {
             if (router_isaddr(d, dst)) {
                 d->rx_handler(pkt);
                 delivered = true;
             }
         }
+        if (delivered) log_write("       [%u] status = delivered\n", (unsigned)pkt->sentinel);
         return delivered;
     }
-
     if (!dev) return false;
     dev->rx_handler(pkt);
+    log_write("       [%u] status = delivered\n", (unsigned)pkt->sentinel);
     return true;
 }
 
 /* Drop a frame: count the reject, log why, free it. */
 static bool router_drop(router_frame *pkt, const char *why) {
     g_rejects++;
-    klog_warning("router dropped frame (%s)\n", why);
-    router_inspect_frame(pkt);
+    log_write("    router_drop(%u) dropped (%s)\n", (unsigned)pkt->sentinel, why);
+    //klog_warning("router dropped frame (%s)\n", why);
+    //router_inspect_frame(pkt);
     kfree(pkt);
     return false;
 }
@@ -293,11 +310,11 @@ static bool router_drop(router_frame *pkt, const char *why) {
  */
 bool router_send(router_frame *pkt) {
     if (!pkt) return false;
-
     if (!frame_is_sane(pkt))          return router_drop(pkt, "frame_is_sane=false");
     if (g_depth >= ROUTER_MAX_DEPTH)  return router_drop(pkt, "g_depth >= ROUTER_MAX_DEPTH");
 
     g_depth++;
+    log_write("    router_send(depth=%u,%u)\n", (unsigned)g_depth, (unsigned)pkt->sentinel);
     const bool delivered = router_dispatch(pkt);
     g_depth--;
 
@@ -305,6 +322,7 @@ bool router_send(router_frame *pkt) {
     else           g_rejects++;
 
     kfree(pkt);
+    log_write("    router_send(depth=%u)->kfree(%u)\n", (unsigned)g_depth, (unsigned)pkt->sentinel);
     return delivered;
 }
 
@@ -314,17 +332,17 @@ router_frame *router_create_p(router_address src_addr, router_address dst_addr,
                               const uint8_t *payload, uint16_t payload_len) {
     if (payload_len > 0 && !payload) return NULL;
     if (payload_len > ROUTER_MAX_PAYLOAD) return NULL;
-
     router_frame *frame = (router_frame *)kmalloc(sizeof(router_frame) + payload_len);
     if (!frame) return NULL;
-
-    frame->sentinel = g_success;
+    uint16_t r_sid = rnd_next();
+    frame->sentinel = r_sid;
     frame->src_addr = src_addr;
     frame->dst_addr = dst_addr;
     frame->type     = (uint8_t)ptype;
     frame->port     = port;
     frame->length   = payload_len;
     if (payload_len > 0) memcpy(frame->payload, payload, payload_len);
+    log_write("    router_create_p(%u,port=%u)->kmalloc(length=%u)\n", (unsigned)r_sid, (unsigned)port, (unsigned)payload_len);
     return frame;
 }
 
@@ -336,6 +354,7 @@ router_frame *router_create(router_address src_addr, router_address dst_addr,
 }
 
 /* void, anonymous source */
+
 static void route_to_void(router_frame *pkt) { (void)pkt; g_voided++; }
 static void init_vsink(void) { register_sink("void", ADDR_UNICAST(NOBODY), route_to_void); }
 
@@ -355,6 +374,7 @@ bool router_perform_test(router_address id) {
  */
 void router_init(void) {
     if (g_depth > 0) return;
+    log_write("    router_init()\n");
     klog_serv("Setting up environment...\n");
     router_device *d = device_head;
     while (d) {
@@ -365,5 +385,4 @@ void router_init(void) {
     device_head = NULL;
     router_reset_metrics();
     init_vsink();
-    //router_perform_test(ADDR_NOBODY);
 }

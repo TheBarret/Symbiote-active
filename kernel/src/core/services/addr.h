@@ -26,6 +26,14 @@
  * A mask-based addressing scheme for routing endpoints and messages.
  * Ports are not part of the address: they live in router_frame.port.
  *
+ * Class	Name	    Value space	            Role	Valid as
+ * 0x0	    UNICAST	    0..4095 endpoint IDs	One specific endpoint. Identity + source + destination.	source, destination
+ * 0x1	    MULTICAST	0..15 group IDs	        A group bit. Delivery target only.	destination only
+ * 0x2	    BROADCAST	0 (ignored)	            Every registered endpoint,	destination only
+ * 0x3	    ANYCAST	    0..4095                 Service IDs	One provider of a service, resolved by ID.	destination only
+ * 0x4..0xF	PROTECTED	-	                    Reserved interior bus space. Currently rejected.	nothing yet
+ *
+ * Everything between 0x0001..0x0FFF is free address space.
  * ADDR_CLASS_SHIFT, ADDR_VALUE_MASK and NOBODY are provided by config.h.
  */
 
