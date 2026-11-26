@@ -29,7 +29,7 @@
 /* HEAP settings
  * Ref: src/core/heap.h
  */
-#define HEAP_CHUNK_SIZE     (256 * 1024)
+#define HEAP_CHUNK_SIZE     (256 * 1024)    /* 262144 */
 #define HEAP_ALIGN          16
 #define HEAP_MIN_BLOCK_SIZE HEAP_ALIGN
 
@@ -118,7 +118,7 @@ enum ext_prio {
 /* Router settings
  * Ref: src/core/services/router.h
  */
-#define ROUTER_SIZE_MAX     1024 /*  max buffer */
+#define ROUTER_SIZE_MAX     2048 /*  Frame payload maximum length set to 0x0800 */
 #define ROUTER_MCAST_GROUPS 16u   /* Number of multicast groups; bounded by the width of router_device.mcast_groups. */
 #define ROUTER_MAX_DEPTH    8u    /* Maximum nesting of router_send, stops reply cycles (A -> B -> A) */
 
@@ -128,19 +128,19 @@ enum ext_prio {
 #define ADDR_CLASS_SHIFT  12
 #define ADDR_VALUE_MASK   0x0FFFu
 
-/* Router functions */
-#define NOBODY      0u      /* void(0) */
-#define BUS_PRINT   0x00F1u /* print(<data>) */
-#define BUS_RND     0x00F2u /* uint16_t = random.h->next_rnd() */
-#define BUS_SLEEP   0x00F3u /* kernel.sleep() */
-#define BUS_CLEAR   0x00F4u /* Clear screen */
-#define BUS_KILL    0x00F5u /* stops kernel, hangs forever */
-#define BUS_TASKS   0x00F6u /* uint32_t = loop.h->loop_get_stats() */
+/* Router address mappings */
+#define NOBODY      0u      /* used for anonymous frames */
+#define BUS_PRINT   0x00F0u /* kprintf() */
+#define BUS_RND     0x00F1u /* uint16_t = random.h->next_rnd() */
+#define BUS_SLEEP   0x00F2u /* timer.h->timer_sleep_ms() */
+#define BUS_CLEAR   0x00F3u /* (ANSI) Clear screen */
+#define BUS_KILL    0x00F4u /* Stops kernel, hangs forever */
+#define BUS_TASKS   0x00F5u /* uint32_t = loop.h->loop_get_stats.tasks */
+#define BUS_VM      0x00FEu /* Virtual machine */
 
+/* Router port mappings */
 #define DEFAULT_BC       0u /* broadcast port = 0 */
-#define DEFAULT_PORT     1u /* reply port = 1 */
-
-
+#define DEFAULT_PORT     1u /* service   port = 1 */
 
 /* Fail at build */
 _Static_assert((PMM_PAGE_SIZE  & (PMM_PAGE_SIZE  - 1)) == 0, "config.h: PMM_PAGE_SIZE must be a power of two");
@@ -150,5 +150,6 @@ _Static_assert(HEAP_ALIGN >= 8,                              "config.h: HEAP_ALI
 _Static_assert(HEAP_MIN_BLOCK_SIZE == HEAP_ALIGN,            "config.h: HEAP_MIN_BLOCK_SIZE must equal HEAP_ALIGN");
 _Static_assert(PMM_PAGE_SIZE == VMM_PAGE_SIZE,               "config.h: PMM and VMM must agree on page size");
 _Static_assert(TIMER_MAX_TASKS > 0,                          "config.h: TIMER_MAX_TASKS must be positive");
-_Static_assert(ROUTER_MAX_DEPTH > 0 && ROUTER_MAX_DEPTH <= 255,"config.h: ROUTER_MAX_DEPTH invalid range (uint8_t = 0-255)");
+_Static_assert(ROUTER_MAX_DEPTH > 0 && ROUTER_MAX_DEPTH <= 255,"config.h: ROUTER_MAX_DEPTH invalid range, expected: 0-255)");
+_Static_assert(ROUTER_SIZE_MAX > 0 && ROUTER_SIZE_MAX <= 0x0800,"config.h: ROUTER_SIZE_MAX can't be negative or exceed 2048");
 #endif

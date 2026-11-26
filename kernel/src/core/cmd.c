@@ -6,8 +6,9 @@
 #include <core/version.h>
 #include <core/cmd.h>
 #include <core/kprintf.h>
+#include <core/services/logger.h>
 
-/* codebase: 0.1.2 */
+/* codebase: 0.2.0 */
 
 /* Provided by the linker script (linker-scripts/x86_64.lds). */
 extern const struct sym_cmd __symbiote_cmd_start[];
@@ -141,7 +142,7 @@ static enum num_status parse_num(const char *s, uint64_t *out) {
     return NUM_OK;
 }
 
-/*  dispatch -- */
+/*  dispatch */
 
 int cmd_dispatch(int argc, char **argv) {
     if (argc <= 0)
@@ -150,14 +151,17 @@ int cmd_dispatch(int argc, char **argv) {
     const struct sym_cmd *c = cmd_find(argv[0]);
     if (!c) {
         kprintf("%s: command not found. Try 'help'.\n", argv[0]);
+        log_write("    cmd_dispatch(%s) entry not found\n", c->name);
         return CMD_NOTFOUND;
     }
 
+    log_write("    cmd_dispatch(%s)\n", c->name);
     struct param p[CMD_MAX_ARGS];
     int np = 0;
     const char *err = parse_spec(c->params, p, &np);
     if (err) {
         kprintf("%s: broken parameter spec \"%s\": %s\n", c->name, c->params, err);
+        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
         return CMD_USAGE;
     }
 
@@ -171,6 +175,7 @@ int cmd_dispatch(int argc, char **argv) {
     if (nargs < required) {
         /* Required parameters come first, so p[nargs] is the first missing one. */
         kprintf("%s: missing %s\n", c->name, p[nargs].tok);
+        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
         cmd_print_usage(c);
         return CMD_USAGE;
     }
@@ -181,6 +186,7 @@ int cmd_dispatch(int argc, char **argv) {
             kprintf("%s: too many arguments (takes at most %d, got %d)\n",
                     c->name, has_rest ? CMD_MAX_ARGS : np, nargs);
         cmd_print_usage(c);
+        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
         return CMD_USAGE;
     }
 
@@ -200,11 +206,13 @@ int cmd_dispatch(int argc, char **argv) {
             kprintf("%s: argument %d %s: '%s' is not a number\n",
                     c->name, i + 1, pp->tok, argv[i + 1]);
             cmd_print_usage(c);
+            log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
             return CMD_USAGE;
         case NUM_OVERFLOW:
             kprintf("%s: argument %d %s: '%s' does not fit in 64 bits\n",
                     c->name, i + 1, pp->tok, argv[i + 1]);
             cmd_print_usage(c);
+            log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
             return CMD_USAGE;
         }
     }
@@ -213,10 +221,13 @@ int cmd_dispatch(int argc, char **argv) {
     int rc = c->fn(&a);
     current = NULL;
 
-    if (rc == CMD_USAGE)
+    if (rc == CMD_USAGE) {
         cmd_print_usage(c);
-    else if (rc != 0)
+        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
+    } else if (rc != 0) {
         kprintf("%s exit(%d)\n", c->name, rc);
+    }
+    log_write("    cmd_dispatch(%s) %s, exit code: %i\n", c->name, (rc == 0) ? "success" : "failed", (int)rc);
     return rc;
 }
 

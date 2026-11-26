@@ -10,8 +10,9 @@
 #include <core/cmd.h>
 #include <core/kprintf.h>
 #include <core/shell.h>
+#include <core/services/logger.h>
 
-/* codebase: 0.1.2 */
+/* codebase: 0.2.0 */
 
 #define SHELL_ARG_MAX   (CMD_MAX_ARGS + 1)
 
@@ -54,12 +55,14 @@ static void run_line(char *line) {
     }
     if (argc == 0)
         return;
+    log_write("run_line(arguments=%i)\n", (int)argc);
     cmd_dispatch(argc, argv);
 }
 
 /*  public API  */
 
 void shell_init(void) {
+    log_write("shell_init()\n");
     line_len = 0;
     prompt_shown = false;
     line_buf[0] = '\0';
@@ -116,7 +119,7 @@ void shell_run(void) {
     if (problems) {
         kprintf("[Warning] %d issues detected in look-up table.\n", problems);
     }
-    kprintf("\nType 'help' for a list of commands.\n");
+    //kprintf("\nType 'help' for a list of commands.\n");
 
     shell_init();
 

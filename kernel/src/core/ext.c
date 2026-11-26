@@ -3,8 +3,9 @@
 #include <core/version.h>
 #include <core/ext.h>
 #include <core/klog.h>
+#include <core/services/logger.h>
 
-/* codebase: 0.1.2 */
+/* codebase: 0.2.0 */
 
 /* Provided by the linker script (linker-scripts/x86_64.lds). */
 extern const struct sym_ext __symbiote_ext_start[];
@@ -22,6 +23,7 @@ void ext_init_all(void) {
     /* Walk priority levels in ascending order:
      * each pass finds the next level above `last`, then runs everything at that level.
      * The table is read-only, so we do it with repeated scans instead of sorting. */
+    log_write("ext_init_all() start\n");
     int last = -1;
     for (;;) {
         int next = INT_MAX;
@@ -44,4 +46,5 @@ void ext_init_all(void) {
         }
         last = next;
     }
+    log_write("ext_init_all() stop\n");
 }
