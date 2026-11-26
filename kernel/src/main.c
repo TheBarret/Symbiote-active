@@ -26,6 +26,8 @@
 #include <core/services/addr.h>
 #include <core/services/router.h>
 #include <core/services/toolkit.h>
+#include <core/services/logger.h>
+#include <core/services/vm.h>
 /* kernel modules */
 #include <core/kprintf.h>   // Formatted output to every console
 #include <core/klog.h>      // Kernel logger extension (kern, info, warn, error)
@@ -33,7 +35,6 @@
 #include <core/cmd.h>       // Command-line dispatcher
 #include <core/panic.h>     // Panic handlers
 #include <core/shell.h>     // Shell Manager/dispathcer
-
 
 /* ascii greeter */
 static const char t_ascii[] =
@@ -117,9 +118,13 @@ void kmain(void) {
         klog_error("no PS/2 keyboard detected, halting...\n");
         cpu_halt_forever();     // no keyboard, halt.
     }
+    /* open up file logger */
+    log_open("/kernel.log");
+    log_write("Entering kmain()\n");
+    /* ctor for lib/random.h */
+    rnd_init(RND_SEED);
     /* kernel bus & routing */
     /* endpoint table see: config.h */
-    rnd_init(RND_SEED); /* ctor for lib/random.h */
     router_init();
     router_register_defaults();
     if (!router_perform_test(ADDR_UNICAST(NOBODY))) {
@@ -134,7 +139,6 @@ void kmain(void) {
     machine_welcome(SYM_SHOW_BOOTLOG);
     if (!machine_can_run()) {
             PANIC("kmain() loop.c not initialized");
-            //cpu_halt_forever();
         }
     loop_run(cpu_sti_hlt);      /* noreturn */
 }
