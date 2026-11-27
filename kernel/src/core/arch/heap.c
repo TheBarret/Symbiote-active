@@ -9,12 +9,13 @@
 #include <core/klog.h>
 #include <core/panic.h>
 
-// codebase: 0.1.2
+// codebase: 0.2.0
 
-// Moved to: config.h
-//#define HEAP_CHUNK_SIZE     (256 * 1024)
-//#define HEAP_ALIGN          16
-//#define HEAP_MIN_BLOCK_SIZE HEAP_ALIGN
+/* Reentrancy tripwire: single-threaded kernel, so this only fires if an ISR
+ * or a callee (klog, panic path) allocates while the heap is mid-operation.
+ * Set and cleared only in the kmalloc()/kfree() wrappers: one exit each.
+ */
+static bool g_busy;
 
 #ifdef SYM_MEMDEBUG
 #define BLOCK_MAGIC     0xC0FFEE5Aull
@@ -25,7 +26,7 @@
 #endif
 
 struct block_header {
-    size_t size;
+    size_t size;                /* whole block, header included; 0 = chunk sentinel */
     bool   free;
     uint32_t magic;
 #ifdef SYM_MEMDEBUG
@@ -33,17 +34,20 @@ struct block_header {
 #endif
 } __attribute__((aligned(HEAP_ALIGN)));
 
-/* Both headers are rounded to HEAP_ALIGN so payload and sentinel stay 16-aligned. */
-#define HDR_SIZE        ((sizeof(struct block_header) + HEAP_ALIGN - 1) & ~(size_t)(HEAP_ALIGN - 1))
-#define CHUNK_HDR_SIZE  ((sizeof(struct chunk) + HEAP_ALIGN - 1) & ~(size_t)(HEAP_ALIGN - 1))
-#define BLOCK_PAYLOAD(b)       ((uint8_t *)(b) + HDR_SIZE)
-#define BLOCK_PAYLOAD_SIZE(b)  ((b)->size - HDR_SIZE)
-
 struct chunk {
     struct chunk *next;
     uint64_t base_phys;
     size_t   size;
 };
+
+/* Both headers are rounded to HEAP_ALIGN so payload and sentinel stay aligned. */
+#define HDR_SIZE        ((sizeof(struct block_header) + HEAP_ALIGN - 1) & ~(size_t)(HEAP_ALIGN - 1))
+#define CHUNK_HDR_SIZE  ((sizeof(struct chunk) + HEAP_ALIGN - 1) & ~(size_t)(HEAP_ALIGN - 1))
+#define BLOCK_PAYLOAD(b)       ((uint8_t *)(b) + HDR_SIZE)
+#define BLOCK_PAYLOAD_SIZE(b)  ((b)->size - HDR_SIZE)
+
+/* upper bound on blocks in a chunk, used as a cycle guard */
+#define CHUNK_BLOCK_LIMIT(c)   ((c)->size / (HDR_SIZE + HEAP_MIN_BLOCK_SIZE))
 
 static struct chunk *chunks_head;
 
@@ -58,11 +62,14 @@ static void header_check(struct block_header *b, const char *where) {
 #endif
 }
 
-static struct chunk *chunk_create(size_t payload_bytes) {
-    if (payload_bytes > SIZE_MAX - HDR_SIZE - CHUNK_HDR_SIZE)
+/* block_bytes: size of the first block the caller needs (header included).
+ * The chunk also reserves its own header and the trailing sentinel header.
+ */
+static struct chunk *chunk_create(size_t block_bytes) {
+    if (block_bytes > SIZE_MAX - HDR_SIZE - CHUNK_HDR_SIZE - HEAP_ALIGN - PMM_PAGE_SIZE)
         return NULL;
 
-    size_t need = payload_bytes + HDR_SIZE + CHUNK_HDR_SIZE;
+    size_t need  = block_bytes + HDR_SIZE + CHUNK_HDR_SIZE;   /* block + sentinel + chunk header */
     size_t total = HEAP_CHUNK_SIZE;
     if (need > total)
         total = need + HEAP_ALIGN;
@@ -80,7 +87,7 @@ static struct chunk *chunk_create(size_t payload_bytes) {
     c->next = NULL;
 
     struct block_header *first = (struct block_header *)(base + CHUNK_HDR_SIZE);
-    // reserve HDR_SIZE for the sentinel so first + first_size + HDR_SIZE == chunk end
+    /* reserve HDR_SIZE for the sentinel so first + first_size + HDR_SIZE == chunk end */
     size_t first_size = (c->size - CHUNK_HDR_SIZE - HDR_SIZE) & ~(size_t)(HEAP_ALIGN - 1);
 
     first->size = first_size;
@@ -109,7 +116,6 @@ void heap_init(void) {
         klog_warning("heap_init called twice\n");
         return;
     }
-    chunks_head = NULL;
     if (chunk_create(0) == NULL)
         PANIC("heap: cannot allocate initial chunk");
 
@@ -143,7 +149,19 @@ static struct block_header *block_coalesce_next(struct block_header *b) {
     return b;
 }
 
-void *kmalloc(size_t size) {
+/* claim a free block: split, mark used, tag and poison in debug builds */
+static void *block_claim(struct block_header *b, size_t payload) {
+    block_split(b, payload);
+    b->free = false;
+#ifdef SYM_MEMDEBUG
+    b->owner = ext_current();
+    memset(BLOCK_PAYLOAD(b), POISON_ALLOC, BLOCK_PAYLOAD_SIZE(b));
+#endif
+    return BLOCK_PAYLOAD(b);
+}
+
+/* kmalloc body: may return from anywhere, g_busy is handled by the wrapper */
+static void *kmalloc_locked(size_t size) {
     if (size == 0)
         size = 1;
     if (size > SIZE_MAX - (HEAP_ALIGN - 1))
@@ -161,18 +179,11 @@ void *kmalloc(size_t size) {
 #endif
         while (b->size != 0) {
             header_check(b, "kmalloc scan");
-            if (b->free && b->size >= total) {
-                block_split(b, payload);
-                b->free = false;
-#ifdef SYM_MEMDEBUG
-                b->owner = ext_current();
-                memset(BLOCK_PAYLOAD(b), POISON_ALLOC, BLOCK_PAYLOAD_SIZE(b));
-#endif
-                return BLOCK_PAYLOAD(b);
-            }
+            if (b->free && b->size >= total)
+                return block_claim(b, payload);
             b = (struct block_header *)((uint8_t *)b + b->size);
 #ifdef SYM_MEMDEBUG
-            if (++seen > 100000)
+            if (++seen > CHUNK_BLOCK_LIMIT(c))
                 PANIC("heap: kmalloc scan cycle");
 #endif
         }
@@ -185,13 +196,15 @@ void *kmalloc(size_t size) {
     struct block_header *b = (struct block_header *)((uint8_t *)c + CHUNK_HDR_SIZE);
     if (b->size < total)
         PANIC("heap: new chunk too small");
-    block_split(b, payload);
-    b->free = false;
-#ifdef SYM_MEMDEBUG
-    b->owner = ext_current();
-    memset(BLOCK_PAYLOAD(b), POISON_ALLOC, BLOCK_PAYLOAD_SIZE(b));
-#endif
-    return BLOCK_PAYLOAD(b);
+    return block_claim(b, payload);
+}
+
+void *kmalloc(size_t size) {
+    if (g_busy) PANIC("heap: kmalloc() reentered");
+    g_busy = true;
+    void *p = kmalloc_locked(size);
+    g_busy = false;
+    return p;
 }
 
 void *kzalloc(size_t size) {
@@ -201,14 +214,12 @@ void *kzalloc(size_t size) {
     return p;
 }
 
-void kfree(void *ptr) {
-    if (ptr == NULL)
-        return;
-
+/* kfree body: panics on misuse, otherwise falls off the end */
+static void kfree_locked(void *ptr) {
     struct block_header *b = (struct block_header *)((uint8_t *)ptr - HDR_SIZE);
 
-    /* 1. Locate: find the owning chunk and the block's predecessor,
-     *    and confirm b is a real block boundary. No writes yet. */
+    /* Locate: find the owning chunk and the block's predecessor,
+     * and confirm b is a real block boundary. No writes yet. */
     struct block_header *prev = NULL;
     bool found = false;
 
@@ -233,14 +244,14 @@ void kfree(void *ptr) {
     if (!found)
         PANIC("heap: kfree of a pointer not in any chunk");
 
-    /* 2. Validate the header. */
+    /* validate the header. */
     header_check(b, "kfree");
     if (b->free) {
         klog_error("heap: double free of %p\n", ptr);
         PANIC("heap: double free");
     }
 
-    /* 3. Mutate. */
+    /* mutate. */
 #ifdef SYM_MEMDEBUG
     memset(ptr, POISON_FREE, BLOCK_PAYLOAD_SIZE(b));
     b->owner = NULL;
@@ -251,6 +262,14 @@ void kfree(void *ptr) {
         block_coalesce_next(prev);
 }
 
+void kfree(void *ptr) {
+    if (ptr == NULL)
+        return;
+    if (g_busy) PANIC("heap: kfree() reentered");
+    g_busy = true;
+    kfree_locked(ptr);
+    g_busy = false;
+}
 
 void *krealloc(void *ptr, size_t new_size) {
     if (ptr == NULL)
@@ -321,7 +340,7 @@ void heapcheck(void) {
             if (b->size < HDR_SIZE + HEAP_MIN_BLOCK_SIZE)
                 PANIC("heapcheck: block below minimum");
             b = (struct block_header *)((uint8_t *)b + b->size);
-            if (++seen > 100000)
+            if (++seen > CHUNK_BLOCK_LIMIT(c))
                 PANIC("heapcheck: block chain cycle");
         }
         header_check(b, "heapcheck sentinel");
