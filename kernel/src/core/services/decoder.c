@@ -4,7 +4,9 @@
 #include <lib/mem.h>
 #include <core/services/decoder.h>
 
-static const decoder_tinfo g_types[8] = {
+_Static_assert(DTYPE_STRING + 1 == DTYPE_COUNT, "decoder: DTYPE_COUNT out of step with the type list");
+
+static const decoder_tinfo g_types[DTYPE_COUNT] = {
     [DTYPE_NONE]   = { .width = 0,                 .valid = false },
     [DTYPE_BYTE]   = { .width = 1,                 .valid = true  },
     [DTYPE_INT16]  = { .width = 2,                 .valid = true  },
@@ -12,11 +14,11 @@ static const decoder_tinfo g_types[8] = {
     [DTYPE_UINT16] = { .width = 2,                 .valid = true  },
     [DTYPE_UINT32] = { .width = 4,                 .valid = true  },
     [DTYPE_BOOL]   = { .width = 1,                 .valid = true  },
-    [DTYPE_STRING] = { .width = DECODER_WIDTH_VAR, .valid = true },
+    [DTYPE_STRING] = { .width = DECODER_WIDTH_VAR, .valid = true  },
 };
 
 const decoder_tinfo *decoder_typeinfo(decoder_dtype dtype) {
-    if ((unsigned)dtype >= 8u) return NULL;
+    if ((unsigned)dtype >= (unsigned)DTYPE_COUNT) return NULL;
     return &g_types[dtype];
 }
 
@@ -31,7 +33,7 @@ int frame_check(const uint8_t *payload, uint16_t length) {
 
     const decoder_tinfo *ti = decoder_typeinfo(dtype);
     if (!ti || !ti->valid) return DECODER_ERR_TYPE;
-    if (flags & ~DECODER_FLAG_BIG_ENDIAN) return DECODER_ERR_FLAG;
+    if (flags & (uint8_t)~DECODER_FLAG_BIG_ENDIAN) return DECODER_ERR_FLAG;
 
     if (ti->width != DECODER_WIDTH_VAR) {
         if (dlen != ti->width) return DECODER_ERR_WIDTH;
@@ -39,13 +41,12 @@ int frame_check(const uint8_t *payload, uint16_t length) {
         return DECODER_OK;
     }
 
-    /* STRING: NUL-terminated, bounded, no embedded early NUL requirement
-     * beyond the terminator existing within the payload. */
+    /* STRING: bounded, the only NUL is the last byte */
     if (dlen == 0 || dlen > DECODER_STRING_MAX + 1u) return DECODER_ERR_BAD_STR;
     for (uint16_t i = 0; i < dlen; i++) {
         if (data[i] == 0) return (i == dlen - 1u) ? DECODER_OK : DECODER_ERR_BAD_STR;
     }
-    return DECODER_ERR_INVALID;   /* nothing describes the problem */
+    return DECODER_ERR_BAD_STR;   /* no terminator within the payload */
 }
 
 int frame_decode(const uint8_t *payload, uint16_t length, decoder_data *out) {
@@ -65,17 +66,13 @@ int frame_encode(decoder_dtype dtype, uint8_t flags,
                  uint8_t *buf, uint16_t buf_max, uint16_t *written) {
     if (!buf || !written) return DECODER_ERR_ARG;
 
-    /* dtype must be a known, valid type */
     const decoder_tinfo *ti = decoder_typeinfo(dtype);
     if (!ti || !ti->valid) return DECODER_ERR_TYPE;
 
-    /* only known flag bits are allowed */
     if (flags & (uint8_t)~DECODER_FLAG_BIG_ENDIAN) return DECODER_ERR_FLAG;
 
-    /* value must be present and non-empty */
     if (!value || value_len == 0) return DECODER_ERR_LENGTH;
 
-    /* validate value_len against the type */
     if (ti->width != DECODER_WIDTH_VAR) {
         if (value_len != ti->width) return DECODER_ERR_WIDTH;
         if (dtype == DTYPE_BOOL) {
@@ -93,11 +90,10 @@ int frame_encode(decoder_dtype dtype, uint8_t flags,
         }
     }
 
-    /* capacity check: header + data */
+    /* capacity: header + data */
     size_t total = (size_t)DECODER_HEADER_SIZE + value_len;
-    if (total > buf_max) return DECODER_ERR_INVALID;
+    if (total > buf_max) return DECODER_ERR_LENGTH;
 
-    /* write header then data */
     buf[0] = (uint8_t)dtype;
     buf[1] = flags;
     memcpy(buf + DECODER_HEADER_SIZE, value, value_len);
