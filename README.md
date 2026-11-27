@@ -14,9 +14,9 @@ That constraint is not an apology for incompleteness.
 It is the design method: implement a narrow interface, keep ownership obvious, avoid background machinery until it is needed, and make extensions opt-in.  
 “Small” means fewer mechanisms, not less thoughtful engineering.  
 
-<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/c546f1c1-b80c-4c66-8777-fca74301a4b9" />
+<img width="1286" height="863" alt="bootlog" src="https://github.com/user-attachments/assets/3b27da41-8711-4b52-adc5-6d26840afe3b" />
 
-<img width="336" height="223" alt="screenshots" src="https://github.com/user-attachments/assets/ef77b9fd-6441-49b3-b05e-2c2e2857b808" />
+<img width="336" height="223" alt="screenshots" src="https://github.com/user-attachments/assets/f2e17472-0fe4-4164-ad18-011f4570a286" />
 <img width="336" height="223" alt="screenshots" src="https://github.com/user-attachments/assets/82f28d5d-174d-40e5-8fc5-4c8fa77926c4" />  
 
 ## What the kernel provides
