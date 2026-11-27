@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-// codebase: 0.1.2
+// codebase: 0.2.0
 
 /* Kernel heap: chunked free list, block headers, immediate coalescing.
  * Chunks from pmm_alloc_contig, reached via HHDM, never returned to PMM.
@@ -21,6 +21,8 @@
  - krealloc overflow check simplified; the ? SIZE_MAX trick is gone.
  - heap_get_stats uses a local ps to avoid recomputing BLOCK_PAYLOAD_SIZE(b) three times.
 
+ - refactor heap.c and update codebase version to 0.2.0
+ - updated codebase version and refactored memory allocation functions to improve clarity and maintainability.
  * */
 
 
