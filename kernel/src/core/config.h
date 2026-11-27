@@ -136,7 +136,7 @@ enum ext_prio {
 #define BUS_CLEAR   0x00F3u /* (ANSI) Clear screen */
 #define BUS_KILL    0x00F4u /* Stops kernel, hangs forever */
 #define BUS_TASKS   0x00F5u /* uint32_t = loop.h->loop_get_stats.tasks */
-#define BUS_VM      0x00FEu /* Virtual machine */
+#define BUS_VM      0x00FFu /* bus co-processor, vm16, vmi */
 
 /* Router port mappings */
 #define DEFAULT_BC       0u /* broadcast port = 0 */
