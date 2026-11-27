@@ -1,369 +1,227 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <lib/mem.h>
-#include <lib/string.h>
 #include <core/version.h>
-#include <core/klog.h>
 #include <core/services/vm.h>
 #include <core/services/logger.h>
 
-uint8_t vm_memory[VM_MEM_SIZE];
+/* syscall table */
+struct vm_syscall_slot {
+    uint8_t       class;
+    uint16_t      id;
+    vm_syscall_fn fn;
+    const char   *name;
+};
 
-/* single rom operation */
-static struct vm_bank g_bank;
-static bool           g_bank_in_use;
+static struct vm_syscall_slot g_sys[VM_SYSCALL_MAX];
+static uint32_t               g_sys_count;
+static bool                   g_busy;       /* one run at a time */
 
-/* syscall table, frozen after init */
-static struct vm_syscall_slot vm_syscall[VM_SYSCALL_MAX];
-static uint32_t               vm_syscall_count;
+/* machine state for one run */
+struct vm {
+    const uint8_t *code;        /* image, executed in place */
+    uint16_t       len;
+    uint8_t        class;       /* syscall namespace, set by the kernel */
+    bool           running;
+    enum vm_fault  fault;
+    uint16_t       R[16];
+    uint16_t       I;           /* reserved */
+    uint16_t       PC;
+    uint16_t       SP;
+    uint16_t       FLAGS;
+    uint16_t       stack[16];
+};
 
-/*  bank */
+_Static_assert(VM_FAULT_SYSCALL == 7, "vm: vm_fault_name table out of step with enum vm_fault");
 
-void vm_bank_init(struct vm_bank *bank, uint8_t class, uint32_t budget_max) {
-    if (!bank) return;
-    memset(bank, 0, sizeof *bank);
-    bank->class      = class;
-    bank->budget_max = budget_max;
-    bank->state.last_fault = VM_OK;
-    log_write("       vm_bank_init(class=%u,budget=%u)\n",
-              (unsigned)class, (unsigned)budget_max);
-}
-
-bool vm_bank_load(struct vm_bank *bank, const uint8_t *code, size_t len) {
-    if (!bank || !code || len == 0)          return false;
-    if (bank->base >= VM_MEM_SIZE)           return false;
-    if (len > (size_t)(VM_MEM_SIZE - bank->base)) return false;
-
-    memcpy(vm_memory + bank->base, code, len);
-
-    bank->end              = bank->base + (uint32_t)len;
-    bank->state.PC         = (uint16_t)bank->base;
-    bank->state.SP         = 0;
-    bank->state.I          = 0;
-    bank->state.FLAGS      = 0;
-    bank->state.last_fault = VM_OK;
-    bank->loaded           = true;
-    bank->running          = true;
-    bank->budget           = bank->budget_max;
-
-    log_write("       vm_bank_load(base=0x%04x,end=0x%04x)\n",
-              (unsigned)bank->base, (unsigned)bank->end);
-    return true;
-}
-
-/* fetch */
-
-static bool fetch(struct vm_bank *bank, uint16_t off, uint8_t *out) {
-    uint32_t addr = (uint32_t)bank->state.PC + off;
-    if (addr < bank->base)     return false;
-    if (addr >= bank->end)     return false;
-    if (addr >= VM_MEM_SIZE)   return false;
-    *out = vm_memory[addr];
-    return true;
-}
-
-static bool fetch_addr(struct vm_bank *bank, uint16_t off, uint16_t *out) {
-    uint8_t hi, lo;
-    if (!fetch(bank, off, &hi))                 return false;
-    if (!fetch(bank, (uint16_t)(off + 1), &lo)) return false;
-    *out = (uint16_t)(((uint16_t)hi << 8) | lo);
-    return true;
-}
-
-static bool target_ok(struct vm_bank *bank, uint16_t addr) {
-    return addr >= bank->base && addr < bank->end;
+const char *vm_fault_name(enum vm_fault f) {
+    static const char *const names[] = {
+        "ok", "opcode", "pc", "stack", "budget", "envelope", "busy", "syscall"
+    };
+    return (unsigned)f < sizeof names / sizeof names[0] ? names[f] : "?";
 }
 
 /* syscalls */
 
-bool vm_syscall_register(uint8_t class, uint16_t id, vm_syscall_fn fn, const char *name) {
-    if (!fn || !name)                          return false;
-    if (vm_syscall_count >= VM_SYSCALL_MAX)    return false;
-    for (uint32_t i = 0; i < vm_syscall_count; i++) {
-        if (vm_syscall[i].class == class && vm_syscall[i].id == id)
-            return false;
-    }
-    vm_syscall[vm_syscall_count].class = class;
-    vm_syscall[vm_syscall_count].id    = id;
-    vm_syscall[vm_syscall_count].fn    = fn;
-    vm_syscall[vm_syscall_count].name  = name;
-    vm_syscall_count++;
-    return true;
-}
-
-static vm_syscall_fn vm_syscall_lookup(uint8_t class, uint16_t id) {
-    for (uint32_t i = 0; i < vm_syscall_count; i++) {
-        if (vm_syscall[i].class == class && vm_syscall[i].id == id)
-            return vm_syscall[i].fn;
+static vm_syscall_fn sys_lookup(uint8_t class, uint16_t id) {
+    for (uint32_t i = 0; i < g_sys_count; i++) {
+        if (g_sys[i].class == class && g_sys[i].id == id)
+            return g_sys[i].fn;
     }
     return NULL;
 }
 
-/* step */
+bool vm_syscall_register(uint8_t class, uint16_t id, vm_syscall_fn fn, const char *name) {
+    if (!fn || !name || g_busy)             return false;
+    if (g_sys_count >= VM_SYSCALL_MAX)      return false;
+    if (sys_lookup(class, id) != NULL)      return false;
 
-bool vm_step(struct vm_bank *bank) {
-    if (!bank || !bank->running || !bank->loaded)
-        return false;
+    g_sys[g_sys_count].class = class;
+    g_sys[g_sys_count].id    = id;
+    g_sys[g_sys_count].fn    = fn;
+    g_sys[g_sys_count].name  = name;
+    g_sys_count++;
+    return true;
+}
 
-    uint8_t op;
-    if (!fetch(bank, 0, &op)) {
-        bank->state.last_fault = VM_FAULT_PC;
-        bank->running = false;
-        return false;
-    }
+/* fetch: PC is a logical address, the image starts at VM_ORG */
 
-    uint16_t pc_advance = 1;
+static bool fetch(const struct vm *m, uint16_t off, uint8_t *out) {
+    uint32_t a = (uint32_t)m->PC + off;
+    if (a < VM_ORG) return false;
+    a -= VM_ORG;
+    if (a >= m->len) return false;
+    *out = m->code[a];
+    return true;
+}
+
+static bool fetch_addr(const struct vm *m, uint16_t off, uint16_t *out) {
+    uint8_t hi, lo;
+    if (!fetch(m, off, &hi) || !fetch(m, (uint16_t)(off + 1), &lo)) return false;
+    *out = (uint16_t)(((uint16_t)hi << 8) | lo);
+    return true;
+}
+
+static bool target_ok(const struct vm *m, uint16_t addr) {
+    return addr >= VM_ORG && (uint32_t)(addr - VM_ORG) < m->len;
+}
+
+/* one instruction */
+
+static void vm_step(struct vm *m) {
+    uint16_t adv = 1;
+    uint8_t  op;
+
+    if (!fetch(m, 0, &op)) goto fault_pc;
 
     switch (op) {
 
-    /* tier 1 */
     case VM_OP_NOP:
         break;
 
-    case VM_OP_MOV: {
+    /* register-register */
+    case VM_OP_MOV: case VM_OP_ADD: case VM_OP_SUB: case VM_OP_AND:
+    case VM_OP_OR:  case VM_OP_XOR: case VM_OP_CMP: {
         uint8_t a, b;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &b)) goto fault_pc;
+        if (!fetch(m, 1, &a) || !fetch(m, 2, &b)) goto fault_pc;
         if (a > 15 || b > 15) goto fault_op;
-        bank->state.R[a] = bank->state.R[b];
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_LDI: {
-        uint8_t a, imm;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &imm)) goto fault_pc;
-        if (a > 15) goto fault_op;
-        bank->state.R[a] = imm;
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_ADD: {
-        uint8_t a, b;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &b)) goto fault_pc;
-        if (a > 15 || b > 15) goto fault_op;
-        bank->state.R[a] = (uint16_t)(bank->state.R[a] + bank->state.R[b]);
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_SUB: {
-        uint8_t a, b;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &b)) goto fault_pc;
-        if (a > 15 || b > 15) goto fault_op;
-        bank->state.R[a] = (uint16_t)(bank->state.R[a] - bank->state.R[b]);
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_AND: {
-        uint8_t a, b;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &b)) goto fault_pc;
-        if (a > 15 || b > 15) goto fault_op;
-        bank->state.R[a] &= bank->state.R[b];
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_OR: {
-        uint8_t a, b;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &b)) goto fault_pc;
-        if (a > 15 || b > 15) goto fault_op;
-        bank->state.R[a] |= bank->state.R[b];
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_XOR: {
-        uint8_t a, b;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &b)) goto fault_pc;
-        if (a > 15 || b > 15) goto fault_op;
-        bank->state.R[a] ^= bank->state.R[b];
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_SHL: {
-        uint8_t a, imm;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &imm)) goto fault_pc;
-        if (a > 15) goto fault_op;
-        bank->state.R[a] = (uint16_t)(bank->state.R[a] << (imm & 15));
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_SHR: {
-        uint8_t a, imm;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &imm)) goto fault_pc;
-        if (a > 15) goto fault_op;
-        bank->state.R[a] = (uint16_t)(bank->state.R[a] >> (imm & 15));
-        pc_advance = 3;
-        break;
-    }
-
-    case VM_OP_CMP: {
-        uint8_t a, b;
-        if (!fetch(bank, 1, &a) || !fetch(bank, 2, &b)) goto fault_pc;
-        if (a > 15 || b > 15) goto fault_op;
-        if (bank->state.R[a] == bank->state.R[b])
-            bank->state.FLAGS |= VM_FLAG_Z;
-        else
-            bank->state.FLAGS &= (uint16_t)~VM_FLAG_Z;
-        pc_advance = 3;
-        break;
-    }
-
-    /* tier 2 */
-    case VM_OP_JMP: {
-        uint16_t tgt;
-        if (!fetch_addr(bank, 1, &tgt)) goto fault_pc;
-        if (!target_ok(bank, tgt))      goto fault_pc;
-        bank->state.PC = tgt;
-        return true;
-    }
-
-    case VM_OP_JZ: {
-        uint16_t tgt;
-        if (!fetch_addr(bank, 1, &tgt)) goto fault_pc;
-        if (!target_ok(bank, tgt))      goto fault_pc;
-        if (bank->state.FLAGS & VM_FLAG_Z) {
-            bank->state.PC = tgt;
-            return true;
+        const uint16_t x = m->R[a], y = m->R[b];
+        switch (op) {
+        case VM_OP_MOV: m->R[a] = y;                    break;
+        case VM_OP_ADD: m->R[a] = (uint16_t)(x + y);    break;
+        case VM_OP_SUB: m->R[a] = (uint16_t)(x - y);    break;
+        case VM_OP_AND: m->R[a] = (uint16_t)(x & y);    break;
+        case VM_OP_OR:  m->R[a] = (uint16_t)(x | y);    break;
+        case VM_OP_XOR: m->R[a] = (uint16_t)(x ^ y);    break;
+        default: /* CMP */
+            if (x == y) m->FLAGS |= VM_FLAG_Z;
+            else        m->FLAGS &= (uint16_t)~VM_FLAG_Z;
+            break;
         }
-        pc_advance = 3;
+        adv = 3;
         break;
     }
 
-    case VM_OP_JNZ: {
-        uint16_t tgt;
-        if (!fetch_addr(bank, 1, &tgt)) goto fault_pc;
-        if (!target_ok(bank, tgt))      goto fault_pc;
-        if (!(bank->state.FLAGS & VM_FLAG_Z)) {
-            bank->state.PC = tgt;
-            return true;
+    /* register-immediate */
+    case VM_OP_LDI: case VM_OP_SHL: case VM_OP_SHR: {
+        uint8_t a, imm;
+        if (!fetch(m, 1, &a) || !fetch(m, 2, &imm)) goto fault_pc;
+        if (a > 15) goto fault_op;
+        switch (op) {
+        case VM_OP_LDI: m->R[a] = imm;                                       break;
+        case VM_OP_SHL: m->R[a] = (uint16_t)(m->R[a] << (imm & 15));         break;
+        default: /* SHR */
+                        m->R[a] = (uint16_t)(m->R[a] >> (imm & 15));         break;
         }
-        pc_advance = 3;
+        adv = 3;
         break;
     }
 
-    case VM_OP_CALL: {
+    /* branching: the target is validated even when the branch is not taken */
+    case VM_OP_JMP: case VM_OP_JZ: case VM_OP_JNZ: case VM_OP_CALL: {
         uint16_t tgt;
-        if (!fetch_addr(bank, 1, &tgt)) goto fault_pc;
-        if (!target_ok(bank, tgt))      goto fault_pc;
-        if (bank->state.SP >= 16)       goto fault_stack;
-        bank->state.buffer[bank->state.SP++] = (uint16_t)(bank->state.PC + 3);
-        bank->state.PC = tgt;
-        return true;
+        if (!fetch_addr(m, 1, &tgt) || !target_ok(m, tgt)) goto fault_pc;
+        const bool z = (m->FLAGS & VM_FLAG_Z) != 0;
+        bool take = true;
+        if (op == VM_OP_JZ)  take = z;
+        if (op == VM_OP_JNZ) take = !z;
+        if (op == VM_OP_CALL) {
+            if (m->SP >= 16) goto fault_stack;
+            m->stack[m->SP++] = (uint16_t)(m->PC + 3);
+        }
+        if (take) { m->PC = tgt; return; }
+        adv = 3;
+        break;
     }
 
-    case VM_OP_RET: {
-        if (bank->state.SP == 0) goto fault_stack;
-        bank->state.PC = bank->state.buffer[--bank->state.SP];
-        return true;
-    }
+    case VM_OP_RET:
+        if (m->SP == 0) goto fault_stack;
+        m->PC = m->stack[--m->SP];
+        return;
 
-    /* tier 3 */
     case VM_OP_SYS: {
         uint16_t id;
-        if (!fetch_addr(bank, 1, &id)) goto fault_pc;
-        vm_syscall_fn fn = vm_syscall_lookup(bank->class, id);
-        if (!fn)         goto fault_sys;
-        if (!fn(bank))   goto fault_sys;
-        pc_advance = 3;
+        if (!fetch_addr(m, 1, &id)) goto fault_pc;
+        vm_syscall_fn fn = sys_lookup(m->class, id);
+        if (!fn || !fn(m->R)) goto fault_sys;
+        adv = 3;
         break;
     }
 
     case VM_OP_HALT:
-        bank->state.PC = (uint16_t)(bank->state.PC + 1);
-        bank->running  = false;
-        bank->state.last_fault = VM_OK;
-        return true;
+        m->PC = (uint16_t)(m->PC + 1);
+        m->running = false;
+        return;
 
     default:
         goto fault_op;
     }
 
-    bank->state.PC = (uint16_t)(bank->state.PC + pc_advance);
-    return true;
+    m->PC = (uint16_t)(m->PC + adv);
+    return;
 
-fault_sys:
-    bank->state.last_fault = VM_FAULT_SYSCALL;
-    bank->running = false;
-    return false;
-
-fault_stack:
-    bank->state.last_fault = VM_FAULT_STACK;
-    bank->running = false;
-    return false;
-
-fault_pc:
-    bank->state.last_fault = VM_FAULT_PC;
-    bank->running = false;
-    return false;
-
-fault_op:
-    bank->state.last_fault = VM_FAULT_OPCODE;
-    bank->running = false;
-    return false;
-}
-
-/* run instance */
-
-size_t vm_run(struct vm_bank *bank, uint32_t budget_max) {
-    if (!bank || !bank->running)
-        return 0;
-
-    uint32_t budget = budget_max < bank->budget ? budget_max : bank->budget;
-    uint32_t steps  = 0;
-
-    while (steps < budget) {
-        if (!vm_step(bank)) { steps++; break; }
-        steps++;
-        if (!bank->running) break;
-    }
-
-    if (bank->running && steps == budget)
-        bank->state.last_fault = VM_FAULT_BUDGET;
-
-    bank->budget = (bank->budget > steps) ? (bank->budget - steps) : 0;
-
-    log_write("       vm_run(budget=%u,steps=%u,fault=%d,PC=0x%04x)\n",
-              (unsigned)bank->budget, (unsigned)steps,
-              (int)bank->state.last_fault, (unsigned)bank->state.PC);
-    return steps;
+fault_sys:   m->fault = VM_FAULT_SYSCALL; m->running = false; return;
+fault_stack: m->fault = VM_FAULT_STACK;   m->running = false; return;
+fault_pc:    m->fault = VM_FAULT_PC;      m->running = false; return;
+fault_op:    m->fault = VM_FAULT_OPCODE;  m->running = false; return;
 }
 
 /* service */
 
-enum vm_fault vm_service_run(const uint8_t *payload, size_t len) {
-    /* envelope: magic(4) + header(2) + stream */
-    if (!payload || len < 6)
-        return VM_FAULT_RANGE;
+enum vm_fault vm_service_run(uint8_t class, const uint8_t *payload, size_t len) {
+    if (!payload || len <= VM_ENVELOPE || len > ROUTER_MAX_PAYLOAD)
+        return VM_FAULT_ENVELOPE;
+    if (payload[0] != 'V' || payload[1] != 'M' || payload[2] != '1' || payload[3] != '6')
+        return VM_FAULT_ENVELOPE;
+    if (payload[4] != 0 || payload[5] != 0)     /* header is reserved, must be zero */
+        return VM_FAULT_ENVELOPE;
+    if (g_busy)
+        return VM_FAULT_BUSY;
 
-    uint16_t m0 = (uint16_t)(payload[0] | ((uint16_t)payload[1] << 8));
-    uint16_t m1 = (uint16_t)(payload[2] | ((uint16_t)payload[3] << 8));
-    if (m0 != VM_M0 || m1 != VM_M1)
-        return VM_FAULT_RANGE;
+    g_busy = true;
 
-    /* header at payload[4..5], reserved for now */
-    /* uint16_t hdr = (uint16_t)(payload[4] | ((uint16_t)payload[5] << 8)); */
+    struct vm m = {
+        .code    = payload + VM_ENVELOPE,
+        .len     = (uint16_t)(len - VM_ENVELOPE),
+        .class   = class,
+        .running = true,
+        .fault   = VM_OK,
+        .PC      = VM_ORG,
+    };
 
-    if (g_bank_in_use)
-        return VM_FAULT_RANGE;          /* one foreground transaction at a time */
-
-    g_bank_in_use = true;
-    vm_bank_init(&g_bank, 0, VM_BUDGET_MAX);
-    g_bank.base = 0x0200;               /* fixed base for the baseline */
-
-    enum vm_fault rv;
-    if (!vm_bank_load(&g_bank, payload + 6, len - 6)) {
-        rv = VM_FAULT_RANGE;
-    } else {
-        vm_run(&g_bank, VM_BUDGET_MAX);
-        rv = g_bank.state.last_fault;
+    uint32_t steps = 0;
+    while (m.running && steps < VM_BUDGET_MAX) {
+        vm_step(&m);
+        steps++;
+    }
+    if (m.running) {                            /* budget spent: end the run */
+        m.fault   = VM_FAULT_BUDGET;
+        m.running = false;
     }
 
-    g_bank_in_use = false;
-    return rv;
+    log_write("       vm_run(steps=%u,fault=%s,PC=0x%04x)\n",
+              (unsigned)steps, vm_fault_name(m.fault), (unsigned)m.PC);
+
+    g_busy = false;
+    return m.fault;
 }
