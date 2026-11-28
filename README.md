@@ -1,4 +1,4 @@
-# Symbiote Kernel
+# SymOS (Symbiote) x86-64 kernel
 
 *Active development; interfaces and behavior may change.*  
 
