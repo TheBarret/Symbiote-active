@@ -4,26 +4,25 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* codebase: 0.1.2 */
+/* codebase: 0.2.0 */
 
 /* PLUG SLOT: shell command.
  *
- * A command is one descriptor in the ".symbiote_cmd" linker section,
- * exactly like an extension is one descriptor in ".symbiote_ext".
- * The shell never has a list of commands: it tokenizes a line and asks this registry to run it.
- * To add a command, write a function and one SYM_COMMAND() line,
- * in any file that is built into the image. To remove it, drop the file from EXTENSIONS.
+ * A command is one descriptor in the ".symbiote_cmd" linker section, exactly
+ * like an extension is one descriptor in ".symbiote_ext". The shell never has
+ * a list of commands: it tokenizes a line and asks this registry to run it.
+ * To add a command, write a function and one SYM_COMMAND() line in any file
+ * built into the image. To remove it, drop the file from EXTENSIONS.
  *
- * Each command also DECLARES the parameters it wants.
- * The dispatcher checks the call against that declaration before the handler ever runs,
- * so a handler only sees arguments that are already valid.
+ * Each command DECLARES its parameters. The dispatcher checks the call against
+ * that declaration before the handler runs, so a handler only sees valid arguments.
  *
- * Parameter spec (a string), one item per parameter, separated by spaces:
+ * Parameter spec: one item per parameter, separated by spaces.
  *
  *     <name:type>      required
  *     [name:type]      optional (all optional ones come after required ones)
- *     <name:type...>   the last parameter may be repeated ("rest"):
- *     [name:type...]   one or more / zero or more
+ *     <name:type...>   the last parameter may repeat: one or more
+ *     [name:type...]   zero or more
  *
  * Types:  num   unsigned 64-bit integer, decimal or 0x hex (converted)
  *         str   any text
@@ -51,7 +50,7 @@ struct sym_cmd {
     const char *name;
     const char *params;                     /* spec, see above */
     const char *help;                       /* one line for `help` */
-    int (*fn)(const struct cmd_args *a);    /* return 0 on success, non-zero on failure */
+    int (*fn)(const struct cmd_args *a);    /* return CMD_OK on success */
 };
 
 /* The command name is the id, stringified: SYM_COMMAND(echo, ...) is "echo". */
@@ -60,8 +59,8 @@ struct sym_cmd {
         __attribute__((used, section(".symbiote_cmd"), aligned(8))) =       \
         { #id, (params_), (help_), (fn_) }
 
-/* Exit codes the dispatcher itself produces. A handler may also return
- * CMD_USAGE to say "you called me wrongly": the usage line is printed for it. */
+/* Exit codes. A handler may return CMD_USAGE to say "you called me wrongly":
+ * the dispatcher prints the usage line for it. Any other non-zero is a failure. */
 enum { CMD_OK = 0, CMD_USAGE = 2, CMD_NOTFOUND = 127, CMD_ERR = -1 };
 
 /* Run a tokenized line: argv[0] is the command name.
@@ -76,11 +75,12 @@ const struct sym_cmd *cmd_at(size_t i);
 void cmd_print_usage(const struct sym_cmd *c);
 
 /* Name of the command running right now, or NULL.
- * The panic screen prints this next to ext_current(), so a crash tells you which command did it. */
+ * The panic screen prints this next to ext_current(). */
 const char *cmd_current(void);
 
-/* Check every registered command (duplicate names, malformed specs).
- * Prints each problem and returns how many there were; 0 means all good. */
+/* Check every registered command (incomplete entries, whitespace in names,
+ * malformed specs, duplicates). Prints each problem and returns how many
+ * there were; 0 means all good. */
 int cmd_selfcheck(void);
 
 #endif

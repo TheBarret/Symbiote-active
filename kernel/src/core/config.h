@@ -130,13 +130,10 @@ enum ext_prio {
 
 /* Router address mappings */
 #define NOBODY      0u      /* used for anonymous frames */
-#define BUS_PRINT   0x00F0u /* kprintf() */
+#define BUS_PRINT   0x00F0u /* kprintf() formatter */
 #define BUS_RND     0x00F1u /* uint16_t = random.h->next_rnd() */
-#define BUS_SLEEP   0x00F2u /* timer.h->timer_sleep_ms() */
-#define BUS_CLEAR   0x00F3u /* (ANSI) Clear screen */
-#define BUS_KILL    0x00F4u /* Stops kernel, hangs forever */
-#define BUS_TASKS   0x00F5u /* uint32_t = loop.h->loop_get_stats.tasks */
-#define BUS_VM      0x00FFu /* bus co-processor, vm16, vmi */
+#define BUS_CLS     0x00F2u /* (ANSI) clear screen */
+#define BUS_VM      0x00F3u /* signal frame co-processor, 16bit micro vm */
 
 /* Router port mappings */
 #define DEFAULT_BC       0u /* broadcast port = 0 */

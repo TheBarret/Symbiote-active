@@ -30,7 +30,7 @@ const struct sym_cmd *cmd_find(const char *name) {
     /* A linear scan is the right lookup: a few dozen strcmp() calls cost
      * nothing next to a human typing, and the table stays a plain array. */
     for (const struct sym_cmd *c = __symbiote_cmd_start; c < __symbiote_cmd_end; c++)
-        if (strcmp(c->name, name) == 0)
+        if (c->name && strcmp(c->name, name) == 0)
             return c;
     return NULL;
 }
@@ -51,15 +51,14 @@ struct param {
     bool rest;
 };
 
-/* Parse a spec string into out[]. Returns NULL on success,
- * or a short reason the spec is malformed (that is a bug in the command, not in the user).
+/* Parse a spec string into out[]. Returns NULL on success, or a short reason
+ * the spec is malformed (that is a bug in the command, not in the user).
  */
 static const char *parse_spec(const char *s, struct param *out, int *count) {
     int n = 0;
     bool seen_optional = false;
 
     while (*s) {
-        /* Skip one or more separating spaces. */
         s += strspn(s, " ");
 
         if (*s == '\0')
@@ -126,23 +125,13 @@ static const char *parse_spec(const char *s, struct param *out, int *count) {
     return NULL;
 }
 
-/*  numbers */
+/*  dispatch  */
 
-enum num_status { NUM_OK, NUM_BAD, NUM_OVERFLOW };
-
-/* Decimal or 0x-prefixed hex, unsigned 64-bit, whole string consumed.
- * This is the command dispatcher's notion of a number argument.
- * Distinct from strtoull() in /lib, which accepts a trailing suffix and
- * reports where parsing stopped; command arguments must be exact. */
-static enum num_status parse_num(const char *s, uint64_t *out) {
-    uint64_t v;
-    if (!kstrtoull(s, &v))
-        return NUM_BAD;
-    *out = v;
-    return NUM_OK;
+/* Log a rejected call; `why` is a short fixed phrase. */
+static int usage_error(const struct sym_cmd *c, const char *why) {
+    log_write("    cmd_dispatch(%s) error: %s\n", c->name, why);
+    return CMD_USAGE;
 }
-
-/*  dispatch */
 
 int cmd_dispatch(int argc, char **argv) {
     if (argc <= 0)
@@ -151,7 +140,7 @@ int cmd_dispatch(int argc, char **argv) {
     const struct sym_cmd *c = cmd_find(argv[0]);
     if (!c) {
         kprintf("%s: command not found. Try 'help'.\n", argv[0]);
-        log_write("    cmd_dispatch(%s) entry not found\n", c->name);
+        log_write("    cmd_dispatch(%s) error: command not found\n", argv[0]);
         return CMD_NOTFOUND;
     }
 
@@ -161,8 +150,7 @@ int cmd_dispatch(int argc, char **argv) {
     const char *err = parse_spec(c->params, p, &np);
     if (err) {
         kprintf("%s: broken parameter spec \"%s\": %s\n", c->name, c->params, err);
-        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
-        return CMD_USAGE;
+        return usage_error(c, "broken parameter spec");
     }
 
     int nargs = argc - 1;
@@ -175,9 +163,8 @@ int cmd_dispatch(int argc, char **argv) {
     if (nargs < required) {
         /* Required parameters come first, so p[nargs] is the first missing one. */
         kprintf("%s: missing %s\n", c->name, p[nargs].tok);
-        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
         cmd_print_usage(c);
-        return CMD_USAGE;
+        return usage_error(c, "missing argument");
     }
     if ((!has_rest && nargs > np) || nargs > CMD_MAX_ARGS) {
         if (np == 0)
@@ -186,8 +173,7 @@ int cmd_dispatch(int argc, char **argv) {
             kprintf("%s: too many arguments (takes at most %d, got %d)\n",
                     c->name, has_rest ? CMD_MAX_ARGS : np, nargs);
         cmd_print_usage(c);
-        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
-        return CMD_USAGE;
+        return usage_error(c, "too many arguments");
     }
 
     struct cmd_args a = {
@@ -199,35 +185,29 @@ int cmd_dispatch(int argc, char **argv) {
         const struct param *pp = &p[i < np ? i : np - 1];   /* extras use the rest param */
         if (pp->type != P_NUM)
             continue;
-        switch (parse_num(argv[i + 1], &a.num[i])) {
-        case NUM_OK:
-            break;
-        case NUM_BAD:
-            kprintf("%s: argument %d %s: '%s' is not a number\n",
+        /* Decimal or 0x hex, unsigned 64-bit, whole string consumed. Distinct
+         * from strtoull() in /lib: command arguments must be exact, and
+         * overflow is reported the same way as garbage. */
+        if (!kstrtoull(argv[i + 1], &a.num[i])) {
+            kprintf("%s: argument %d %s: '%s' is not a number (decimal or 0x hex, up to 64 bits)\n",
                     c->name, i + 1, pp->tok, argv[i + 1]);
             cmd_print_usage(c);
-            log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
-            return CMD_USAGE;
-        case NUM_OVERFLOW:
-            kprintf("%s: argument %d %s: '%s' does not fit in 64 bits\n",
-                    c->name, i + 1, pp->tok, argv[i + 1]);
-            cmd_print_usage(c);
-            log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
-            return CMD_USAGE;
+            return usage_error(c, "argument is not a number");
         }
     }
 
+    const char *prev = current;     /* a command may dispatch another */
     current = c->name;
     int rc = c->fn(&a);
-    current = NULL;
+    current = prev;
 
     if (rc == CMD_USAGE) {
         cmd_print_usage(c);
-        log_write("    cmd_dispatch(%s) error: argument signature mismatch\n", c->name);
+        usage_error(c, "handler rejected its arguments");
     } else if (rc != 0) {
         kprintf("%s exit(%d)\n", c->name, rc);
     }
-    log_write("    cmd_dispatch(%s) %s, exit code: %i\n", c->name, (rc == 0) ? "success" : "failed", (int)rc);
+    log_write("    cmd_dispatch(%s) %s, exit code: %d\n", c->name, rc == 0 ? "success" : "failed", rc);
     return rc;
 }
 
@@ -246,8 +226,7 @@ int cmd_selfcheck(void) {
             continue;
         }
 
-        /* Command names must be non-empty and contain no spaces:
-         * the shell tokenizes on spaces, so a name with one could never be typed. */
+        /* The shell tokenizes on spaces, so a name with one could never be typed. */
         if (strcspn(c->name, " \t") != strlen(c->name)) {
             kprintf("Warning: '%s' has whitespace in its name\n", c->name);
             problems++;
