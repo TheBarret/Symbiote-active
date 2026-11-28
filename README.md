@@ -1,8 +1,8 @@
 # SymOS (Symbiote) x86-64 kernel
 
-*Active development; interfaces and behavior may change.*  
+*Slow hobby development; interfaces and behavior may change.*  
 
-**Symbiote OS** is a small, hobby, single-threaded x86-64 kernel written in C.  
+**Symbiote OS** is a intentionally small, hobby-grade, single-threaded x86-64 kernel written in C.  
 It uses the Limine bootloader and is built as a hybrid BIOS/UEFI ISO.  
 
 The design is guided by a simple premise: **everything on the kernel is expensive**.  
